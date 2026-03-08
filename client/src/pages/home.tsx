@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Eye, MessageSquare, Terminal } from "lucide-react";
+import { Search, Eye, Terminal, Shield } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Student } from "@shared/schema";
 
 function getInitials(name: string) {
@@ -16,8 +18,10 @@ export default function HomePage() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [limitHit, setLimitHit] = useState(false);
   const [, navigate] = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 250);
@@ -35,10 +39,26 @@ export default function HomePage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const { data: results, isLoading } = useQuery<Student[]>({
-    queryKey: ["/api/students/search", `?q=${debouncedQuery}`],
-    enabled: debouncedQuery.length >= 2,
+  const { data: searchLimit } = useQuery<{ used: number; limit: number; remaining: number }>({
+    queryKey: ["/api/search-limit"],
+    refetchInterval: 30000,
   });
+
+  const { data: results, isLoading, error } = useQuery<Student[]>({
+    queryKey: ["/api/students/search", `?q=${debouncedQuery}`],
+    enabled: debouncedQuery.length >= 2 && !limitHit,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (error && (error as any)?.message?.includes("429")) {
+      setLimitHit(true);
+      toast({ title: "limit reached", description: "Daily search quota exhausted. Try tomorrow.", variant: "destructive" });
+    }
+    if (results) {
+      queryClient.invalidateQueries({ queryKey: ["/api/search-limit"] });
+    }
+  }, [error, results, toast]);
 
   const { data: stats } = useQuery<{ totalStudents: number }>({
     queryKey: ["/api/stats"],
@@ -50,10 +70,15 @@ export default function HomePage() {
     navigate(`/student/${student.id}`);
   }
 
+  const remaining = searchLimit?.remaining ?? 200;
+  const used = searchLimit?.used ?? 0;
+  const limit = searchLimit?.limit ?? 200;
+  const pct = (remaining / limit) * 100;
+
   return (
     <div className="min-h-screen relative z-10">
       <div className="relative">
-        <div className="max-w-xl mx-auto px-4 pt-20 pb-10 text-center">
+        <div className="max-w-xl mx-auto px-4 pt-16 pb-10 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -73,9 +98,34 @@ export default function HomePage() {
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tighter mb-1 text-foreground" style={{ fontVariationSettings: "'wght' 800" }}>
               IIT JODHPUR
             </h1>
-            <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-8 font-mono">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-6 font-mono">
               student intelligence system
             </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.15 }}
+            className="mb-6"
+          >
+            <div className="inline-flex items-center gap-3 px-4 py-2 border border-white/8 bg-card font-mono" data-testid="search-limit-counter">
+              <Shield className="w-3.5 h-3.5 text-muted-foreground" />
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">daily queries</span>
+                <span className={`text-xs font-bold ${remaining <= 20 ? "text-foreground" : "text-muted-foreground"}`}>
+                  {used}/{limit}
+                </span>
+              </div>
+              <div className="w-20 h-1 bg-white/5 overflow-hidden">
+                <motion.div
+                  className={`h-full ${remaining <= 20 ? "bg-foreground" : "bg-white/30"}`}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${100 - pct}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+            </div>
           </motion.div>
 
           <motion.div
@@ -93,6 +143,7 @@ export default function HomePage() {
                 placeholder="target name, email or roll number..."
                 className="pl-10 pr-4 h-11 text-xs bg-card border border-white/8 focus:border-white/25 rounded-none font-mono tracking-wide transition-all duration-200"
                 value={query}
+                disabled={limitHit}
                 onChange={(e) => {
                   setQuery(e.target.value);
                   setShowDropdown(true);
@@ -101,12 +152,24 @@ export default function HomePage() {
                 onBlur={() => setIsFocused(false)}
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground/40 font-mono">
-                {isFocused && <span className="cursor-blink">_</span>}
+                {isFocused && !limitHit && <span className="cursor-blink">_</span>}
               </span>
             </div>
 
             <AnimatePresence>
-              {showDropdown && debouncedQuery.length >= 2 && (
+              {limitHit && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-2 px-3 py-2 border border-white/10 bg-card text-[10px] font-mono text-muted-foreground uppercase tracking-wider text-center"
+                >
+                  search quota exhausted // resets at midnight
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {showDropdown && debouncedQuery.length >= 2 && !limitHit && (
                 <motion.div
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}

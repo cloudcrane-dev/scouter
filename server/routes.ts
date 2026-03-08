@@ -82,16 +82,47 @@ Please provide a detailed, insightful analysis.`;
   return response.choices[0]?.message?.content || "Unable to generate analysis.";
 }
 
+const DAILY_SEARCH_LIMIT = 200;
+let dailySearchCount = 0;
+let lastResetDate = new Date().toDateString();
+
+function getDailySearchInfo() {
+  const today = new Date().toDateString();
+  if (today !== lastResetDate) {
+    dailySearchCount = 0;
+    lastResetDate = today;
+  }
+  return { used: dailySearchCount, limit: DAILY_SEARCH_LIMIT, remaining: DAILY_SEARCH_LIMIT - dailySearchCount };
+}
+
+function consumeSearch(): boolean {
+  const today = new Date().toDateString();
+  if (today !== lastResetDate) {
+    dailySearchCount = 0;
+    lastResetDate = today;
+  }
+  if (dailySearchCount >= DAILY_SEARCH_LIMIT) return false;
+  dailySearchCount++;
+  return true;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.get("/api/search-limit", (_req, res) => {
+    res.json(getDailySearchInfo());
+  });
 
   app.get("/api/students/search", async (req, res) => {
     try {
       const query = (req.query.q as string) || "";
       if (!query || query.length < 2) {
         return res.json([]);
+      }
+      if (!consumeSearch()) {
+        return res.status(429).json({ error: "Daily search limit reached (200/day). Try again tomorrow." });
       }
       const results = await storage.searchStudents(query);
       res.json(results);
