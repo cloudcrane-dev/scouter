@@ -20,13 +20,17 @@ A mobile-friendly web application for scouting and analyzing IIT Jodhpur student
 7. **Dark Theme** - Forced dark mode via `class="dark"` on `<html>` in index.html (no flash)
 
 ## UI Design
-- Glassmorphism: `bg-card/50 backdrop-blur-sm border border-white/5`
-- Gradient background orbs (absolute positioned, pointer-events-none)
-- Framer Motion animations: page transitions, staggered lists, pulsing AI loader
-- Bottom nav with active indicator animation
+- Hacker/terminal aesthetic: pure black & white, no color
+- Font: JetBrains Mono (monospace throughout) with variable weight
+- Particle physics canvas: floating particles with mouse repulsion, connections, click burst
+- Scanline overlay animation
+- Sharp edges (no border-radius), minimal borders (border-white/8)
+- Framer Motion animations: staggered lists, terminal-style loader
+- Bottom nav with active indicator (thin white line)
+- No trending section on home page
 - Phone number NOT shown on student profile
 - Peer feedback list NOT shown (only insight submission)
-- Compact AI Analysis section with inline generate button
+- Compact AI Analysis section with terminal-style "$ run analysis" button
 
 ## Data Flow
 1. User searches student by name/email

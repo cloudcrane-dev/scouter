@@ -3,17 +3,15 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Eye, MessageSquare, Mail, Sparkles,
-  Send, RefreshCw, User, Zap,
+  Send, RefreshCw, User, Terminal,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Student, Feedback } from "@shared/schema";
+import type { Student } from "@shared/schema";
 
 function getInitials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -37,48 +35,56 @@ function renderInlineFormatting(text: string) {
 function MarkdownRenderer({ content }: { content: string }) {
   const lines = content.split("\n");
   return (
-    <div className="space-y-1 text-sm text-muted-foreground leading-relaxed">
+    <div className="space-y-1 text-xs text-muted-foreground leading-relaxed font-mono">
       {lines.map((line, i) => {
-        if (line.startsWith("# ")) return <h1 key={i} className="text-lg font-bold mt-4 mb-1.5 text-foreground">{line.slice(2)}</h1>;
-        if (line.startsWith("## ")) return <h2 key={i} className="text-base font-semibold mt-3 mb-1 text-foreground">{line.slice(3)}</h2>;
-        if (line.startsWith("### ")) return <h3 key={i} className="text-sm font-semibold mt-2 mb-0.5 text-foreground">{line.slice(4)}</h3>;
-        if (line.startsWith("**") && line.endsWith("**")) return <p key={i} className="font-semibold mt-2 mb-0.5 text-foreground">{line.slice(2, -2)}</p>;
+        if (line.startsWith("# ")) return <h1 key={i} className="text-sm font-bold mt-3 mb-1 text-foreground tracking-tight">{line.slice(2)}</h1>;
+        if (line.startsWith("## ")) return <h2 key={i} className="text-xs font-bold mt-2 mb-1 text-foreground uppercase tracking-widest">{line.slice(3)}</h2>;
+        if (line.startsWith("### ")) return <h3 key={i} className="text-xs font-semibold mt-2 mb-0.5 text-foreground">{line.slice(4)}</h3>;
+        if (line.startsWith("**") && line.endsWith("**")) return <p key={i} className="font-semibold mt-2 mb-0.5 text-foreground text-xs">{line.slice(2, -2)}</p>;
         if (line.startsWith("- ")) {
           const text = line.slice(2);
           const boldMatch = text.match(/^\*\*(.*?)\*\*:?\s*(.*)/);
           if (boldMatch) {
             return (
-              <div key={i} className="flex gap-2 ml-1 mb-0.5">
-                <span className="text-primary mt-0.5 shrink-0 text-xs">&#9679;</span>
+              <div key={i} className="flex gap-2 ml-2 mb-0.5">
+                <span className="text-muted-foreground mt-0.5 shrink-0 text-[10px]">&gt;</span>
                 <span><strong className="text-foreground">{boldMatch[1]}</strong>{boldMatch[2] ? `: ${boldMatch[2]}` : ""}</span>
               </div>
             );
           }
           return (
-            <div key={i} className="flex gap-2 ml-1 mb-0.5">
-              <span className="text-primary mt-0.5 shrink-0 text-xs">&#9679;</span>
+            <div key={i} className="flex gap-2 ml-2 mb-0.5">
+              <span className="text-muted-foreground mt-0.5 shrink-0 text-[10px]">&gt;</span>
               <span>{renderInlineFormatting(text)}</span>
             </div>
           );
         }
-        if (line.trim() === "") return <div key={i} className="h-1.5" />;
+        if (line.trim() === "") return <div key={i} className="h-1" />;
         return <p key={i} className="mb-0.5">{renderInlineFormatting(line)}</p>;
       })}
     </div>
   );
 }
 
-function PulsingOrb() {
+function TerminalLoader() {
+  const [dots, setDots] = useState("");
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots(d => d.length >= 3 ? "" : d + ".");
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className="flex items-center justify-center gap-1.5 py-6">
-      {[0, 1, 2].map(i => (
-        <motion.div
-          key={i}
-          className="w-2 h-2 rounded-full bg-primary"
-          animate={{ scale: [1, 1.4, 1], opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-        />
-      ))}
+    <div className="py-6 font-mono text-xs text-muted-foreground">
+      <div className="flex items-center gap-2">
+        <span className="text-foreground">$</span>
+        <span>scanning web{dots}</span>
+        <span className="cursor-blink">_</span>
+      </div>
+      <div className="mt-1 text-[10px] text-muted-foreground/50">
+        tavily search + gpt analysis in progress
+      </div>
     </div>
   );
 }
@@ -117,7 +123,7 @@ export default function StudentPage() {
       queryClient.setQueryData(["/api/students", id.toString(), "analyze"], data);
     },
     onError: () => {
-      toast({ title: "Analysis failed", description: "Could not generate AI analysis.", variant: "destructive" });
+      toast({ title: "error", description: "analysis failed. try again.", variant: "destructive" });
     },
   });
 
@@ -134,63 +140,52 @@ export default function StudentPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString(), "feedback"] });
       queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString()] });
       queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
-      toast({ title: "Insight submitted", description: "Thanks for contributing!" });
+      toast({ title: "transmitted", description: "insight recorded." });
     },
     onError: () => {
-      toast({ title: "Failed", description: "Could not submit insight.", variant: "destructive" });
+      toast({ title: "error", description: "transmission failed.", variant: "destructive" });
     },
   });
 
   if (studentLoading) {
     return (
-      <div className="min-h-screen bg-background p-4 max-w-xl mx-auto pt-6">
-        <Skeleton className="h-7 w-16 mb-6 rounded-lg" />
-        <div className="flex items-center gap-4 mb-6">
-          <Skeleton className="w-16 h-16 rounded-full" />
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-36" />
-            <Skeleton className="h-3.5 w-48" />
-          </div>
+      <div className="min-h-screen bg-background p-4 max-w-xl mx-auto pt-6 relative z-10">
+        <Skeleton className="h-6 w-16 mb-6 rounded-none" />
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-36 rounded-none" />
+          <Skeleton className="h-3 w-48 rounded-none" />
+          <Skeleton className="h-32 w-full rounded-none" />
         </div>
-        <Skeleton className="h-40 w-full rounded-xl" />
       </div>
     );
   }
 
   if (!student) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center"
-        >
-          <User className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-30" />
-          <h2 className="text-lg font-semibold mb-1">Not Found</h2>
-          <p className="text-sm text-muted-foreground mb-4">This student doesn't exist.</p>
-          <Button onClick={() => navigate("/")} data-testid="button-go-home" size="sm">Go Home</Button>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4 relative z-10">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center font-mono">
+          <User className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-30" />
+          <p className="text-xs text-muted-foreground mb-1">404 // node not found</p>
+          <Button onClick={() => navigate("/")} data-testid="button-go-home" size="sm" className="rounded-none text-xs mt-2">
+            &lt; return
+          </Button>
         </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background relative">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-[400px] h-[400px] bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute top-40 right-0 w-[300px] h-[300px] bg-chart-4/5 rounded-full blur-3xl" />
-      </div>
-
+    <div className="min-h-screen bg-background relative z-10">
       <div className="relative max-w-xl mx-auto px-4 py-4">
         <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2 }}>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => navigate("/")}
-            className="mb-4 text-muted-foreground"
+            className="mb-4 text-muted-foreground rounded-none text-xs font-mono"
             data-testid="button-back"
           >
-            <ArrowLeft className="w-4 h-4 mr-1" /> Back
+            <ArrowLeft className="w-3 h-3 mr-1" /> back
           </Button>
         </motion.div>
 
@@ -198,38 +193,29 @@ export default function StudentPage() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="rounded-2xl bg-card/50 backdrop-blur-sm border border-white/5 p-5 mb-4"
+          className="border border-white/8 bg-card p-5 mb-3"
         >
-          <div className="flex items-center gap-4">
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-            >
-              <Avatar className="w-16 h-16 ring-2 ring-primary/20">
-                <AvatarImage src={student.pictureUrl || undefined} alt={student.name} />
-                <AvatarFallback className="text-base font-bold bg-primary/15 text-primary">
-                  {getInitials(student.name)}
-                </AvatarFallback>
-              </Avatar>
-            </motion.div>
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 border border-white/15 flex items-center justify-center text-sm font-bold text-muted-foreground shrink-0 tracking-wider">
+              {getInitials(student.name)}
+            </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold mb-0.5 truncate" data-testid="text-student-name">
+              <h1 className="text-base font-bold tracking-tight mb-0.5 font-mono" data-testid="text-student-name" style={{ fontVariationSettings: "'wght' 700" }}>
                 {student.name}
               </h1>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2 font-mono">
                 <Mail className="w-3 h-3 shrink-0" />
                 <span className="truncate" data-testid="text-student-email">{student.email}</span>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="secondary" className="text-xs bg-white/5 border-white/10" data-testid="badge-search-count">
-                  <Eye className="w-3 h-3 mr-1" />
-                  {student.searchCount}
-                </Badge>
-                <Badge variant="secondary" className="text-xs bg-white/5 border-white/10" data-testid="badge-feedback-count">
-                  <MessageSquare className="w-3 h-3 mr-1" />
-                  {student.feedbackCount}
-                </Badge>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono" data-testid="badge-search-count">
+                  <Eye className="w-3 h-3" />
+                  {student.searchCount} views
+                </span>
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono" data-testid="badge-feedback-count">
+                  <MessageSquare className="w-3 h-3" />
+                  {student.feedbackCount} insights
+                </span>
               </div>
             </div>
           </div>
@@ -238,13 +224,13 @@ export default function StudentPage() {
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
-          className="rounded-2xl bg-card/50 backdrop-blur-sm border border-white/5 p-5 mb-4"
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="border border-white/8 bg-card p-5 mb-3"
         >
           <div className="flex items-center justify-between gap-2 mb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <h2 className="font-semibold text-sm">AI Analysis</h2>
+            <div className="flex items-center gap-2 font-mono">
+              <Sparkles className="w-3.5 h-3.5 text-foreground" />
+              <h2 className="font-semibold text-xs uppercase tracking-widest">analysis</h2>
             </div>
             {analysisData && (
               <Button
@@ -253,10 +239,10 @@ export default function StudentPage() {
                 onClick={() => analyzeMutation.mutate()}
                 disabled={analyzeMutation.isPending}
                 data-testid="button-refresh-analysis"
-                className="text-xs text-muted-foreground"
+                className="text-[10px] text-muted-foreground rounded-none font-mono"
               >
                 <RefreshCw className={`w-3 h-3 mr-1 ${analyzeMutation.isPending ? "animate-spin" : ""}`} />
-                Refresh
+                rescan
               </Button>
             )}
           </div>
@@ -270,10 +256,10 @@ export default function StudentPage() {
                 exit={{ opacity: 0 }}
                 onClick={() => analyzeMutation.mutate()}
                 data-testid="button-generate-analysis"
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-primary/10 to-chart-4/10 border border-primary/20 hover:border-primary/40 flex items-center justify-center gap-2 text-sm font-medium text-primary transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                className="w-full py-3 border border-white/10 hover:border-white/25 flex items-center justify-center gap-2 text-xs font-mono text-muted-foreground hover:text-foreground transition-all duration-200 active:scale-[0.99] cursor-pointer tracking-wider uppercase"
               >
-                <Zap className="w-4 h-4" />
-                Generate AI Analysis
+                <Terminal className="w-3.5 h-3.5" />
+                $ run analysis
               </motion.button>
             ) : analyzeMutation.isPending ? (
               <motion.div
@@ -282,10 +268,7 @@ export default function StudentPage() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                <div className="text-center">
-                  <PulsingOrb />
-                  <p className="text-xs text-muted-foreground">Searching the web & generating insights...</p>
-                </div>
+                <TerminalLoader />
               </motion.div>
             ) : analysisData ? (
               <motion.div
@@ -295,9 +278,9 @@ export default function StudentPage() {
                 transition={{ duration: 0.3 }}
               >
                 {analysisData.cached && (
-                  <Badge variant="secondary" className="mb-2 text-[10px] bg-white/5 border-white/10">
+                  <span className="inline-block text-[9px] font-mono text-muted-foreground/50 border border-white/5 px-1.5 py-0.5 mb-2 uppercase tracking-widest">
                     cached
-                  </Badge>
+                  </span>
                 )}
                 <MarkdownRenderer content={analysisData.analysis} />
               </motion.div>
@@ -308,20 +291,20 @@ export default function StudentPage() {
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.25 }}
-          className="rounded-2xl bg-card/50 backdrop-blur-sm border border-white/5 p-5 mb-20"
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="border border-white/8 bg-card p-5 mb-20"
         >
-          <div className="flex items-center gap-2 mb-3">
-            <MessageSquare className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold text-sm">Add Your Insight</h2>
+          <div className="flex items-center gap-2 mb-3 font-mono">
+            <MessageSquare className="w-3.5 h-3.5 text-foreground" />
+            <h2 className="font-semibold text-xs uppercase tracking-widest">add insight</h2>
           </div>
           <div className="flex gap-2">
             <Textarea
               data-testid="input-feedback"
-              placeholder="Share what you know about this person..."
+              placeholder="transmit intel..."
               value={feedbackContent}
               onChange={(e) => setFeedbackContent(e.target.value)}
-              className="min-h-[60px] resize-none text-sm bg-white/5 border-white/10 focus:border-primary/50 rounded-xl flex-1"
+              className="min-h-[56px] resize-none text-xs bg-background border-white/8 focus:border-white/20 rounded-none flex-1 font-mono"
               maxLength={2000}
             />
             <Button
@@ -329,9 +312,9 @@ export default function StudentPage() {
               disabled={!feedbackContent.trim() || feedbackMutation.isPending}
               size="icon"
               data-testid="button-submit-feedback"
-              className="shrink-0 self-end"
+              className="shrink-0 self-end rounded-none"
             >
-              <Send className={`w-4 h-4 ${feedbackMutation.isPending ? "animate-pulse" : ""}`} />
+              <Send className={`w-3.5 h-3.5 ${feedbackMutation.isPending ? "animate-pulse" : ""}`} />
             </Button>
           </div>
         </motion.div>

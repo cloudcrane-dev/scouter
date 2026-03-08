@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home";
 import StudentPage from "@/pages/student";
 import LeaderboardPage from "@/pages/leaderboard";
+import ParticleField from "@/components/particles";
 import { Search, Trophy } from "lucide-react";
 
 function BottomNav() {
@@ -15,32 +16,28 @@ function BottomNav() {
   const isLeaderboard = location === "/leaderboard";
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-xl border-t border-white/5 z-50 safe-area-pb" data-testid="nav-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 bg-background/90 backdrop-blur-sm border-t border-white/5 z-50 safe-area-pb font-mono" data-testid="nav-bottom">
       <div className="max-w-2xl mx-auto flex">
         <button
           data-testid="nav-search"
           onClick={() => navigate("/")}
-          className="flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-all duration-200 relative cursor-pointer"
+          className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] uppercase tracking-[0.15em] transition-all duration-200 relative cursor-pointer"
         >
-          <div className={`transition-all duration-300 ${isHome ? "scale-110" : "scale-100"}`}>
-            <Search className={`w-5 h-5 transition-colors duration-200 ${isHome ? "text-primary" : "text-muted-foreground"}`} />
-          </div>
-          <span className={`transition-colors duration-200 ${isHome ? "text-primary" : "text-muted-foreground"}`}>Search</span>
+          <Search className={`w-4 h-4 transition-colors duration-200 ${isHome ? "text-foreground" : "text-muted-foreground/50"}`} />
+          <span className={`transition-colors duration-200 ${isHome ? "text-foreground" : "text-muted-foreground/50"}`}>search</span>
           {isHome && (
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full nav-indicator" />
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-foreground nav-indicator" />
           )}
         </button>
         <button
           data-testid="nav-leaderboard"
           onClick={() => navigate("/leaderboard")}
-          className="flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-all duration-200 relative cursor-pointer"
+          className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] uppercase tracking-[0.15em] transition-all duration-200 relative cursor-pointer"
         >
-          <div className={`transition-all duration-300 ${isLeaderboard ? "scale-110" : "scale-100"}`}>
-            <Trophy className={`w-5 h-5 transition-colors duration-200 ${isLeaderboard ? "text-primary" : "text-muted-foreground"}`} />
-          </div>
-          <span className={`transition-colors duration-200 ${isLeaderboard ? "text-primary" : "text-muted-foreground"}`}>Leaderboard</span>
+          <Trophy className={`w-4 h-4 transition-colors duration-200 ${isLeaderboard ? "text-foreground" : "text-muted-foreground/50"}`} />
+          <span className={`transition-colors duration-200 ${isLeaderboard ? "text-foreground" : "text-muted-foreground/50"}`}>ranks</span>
           {isLeaderboard && (
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full nav-indicator" />
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-foreground nav-indicator" />
           )}
         </button>
       </div>
@@ -64,6 +61,8 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <ParticleField />
+        <div className="scanline" />
         <div className="pb-16">
           <Router />
         </div>
