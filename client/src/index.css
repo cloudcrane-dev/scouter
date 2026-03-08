@@ -179,6 +179,24 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+@keyframes nav-slide-in {
+  from { transform: translateX(-50%) scaleX(0); opacity: 0; }
+  to { transform: translateX(-50%) scaleX(1); opacity: 1; }
+}
+
+.nav-indicator {
+  animation: nav-slide-in 0.25s ease-out;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.4s ease-out both;
+}
+
 /**
  * Using the elevate system.
  * Automatic contrast adjustment.
