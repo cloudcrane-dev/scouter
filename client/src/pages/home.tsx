@@ -51,7 +51,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background relative z-10">
+    <div className="min-h-screen relative z-10">
       <div className="relative">
         <div className="max-w-xl mx-auto px-4 pt-20 pb-10 text-center">
           <motion.div
@@ -70,11 +70,11 @@ export default function HomePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
           >
-            <h1 className="text-4xl sm:text-5xl font-bold tracking-tighter mb-1 text-foreground" style={{ fontVariationSettings: "'wght' 800" }}>
-              SCOUTER
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tighter mb-1 text-foreground" style={{ fontVariationSettings: "'wght' 800" }}>
+              IIT JODHPUR
             </h1>
             <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground mb-8 font-mono">
-              IIT Jodhpur // intelligence system
+              student intelligence system
             </p>
           </motion.div>
 
@@ -90,7 +90,7 @@ export default function HomePage() {
               <Input
                 data-testid="input-search"
                 type="search"
-                placeholder="query target..."
+                placeholder="target name, email or roll number..."
                 className="pl-10 pr-4 h-11 text-xs bg-card border border-white/8 focus:border-white/25 rounded-none font-mono tracking-wide transition-all duration-200"
                 value={query}
                 onChange={(e) => {
@@ -168,7 +168,7 @@ export default function HomePage() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.8 }}
           >
-            search by name or email // min 2 chars
+            search by name, email or roll number // min 2 chars
           </motion.p>
         </div>
       </div>

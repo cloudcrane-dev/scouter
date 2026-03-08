@@ -149,7 +149,7 @@ export default function StudentPage() {
 
   if (studentLoading) {
     return (
-      <div className="min-h-screen bg-background p-4 max-w-xl mx-auto pt-6 relative z-10">
+      <div className="min-h-screen p-4 max-w-xl mx-auto pt-6 relative z-10">
         <Skeleton className="h-6 w-16 mb-6 rounded-none" />
         <div className="space-y-3">
           <Skeleton className="h-4 w-36 rounded-none" />
@@ -162,7 +162,7 @@ export default function StudentPage() {
 
   if (!student) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4 relative z-10">
+      <div className="min-h-screen flex items-center justify-center p-4 relative z-10">
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center font-mono">
           <User className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-30" />
           <p className="text-xs text-muted-foreground mb-1">404 // node not found</p>
@@ -175,7 +175,7 @@ export default function StudentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background relative z-10">
+    <div className="min-h-screen relative z-10">
       <div className="relative max-w-xl mx-auto px-4 py-4">
         <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2 }}>
           <Button

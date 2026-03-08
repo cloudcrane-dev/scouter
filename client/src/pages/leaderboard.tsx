@@ -20,7 +20,7 @@ export default function LeaderboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background relative z-10">
+    <div className="min-h-screen relative z-10">
       <div className="relative max-w-xl mx-auto px-4 py-4">
         <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2 }}>
           <Button
