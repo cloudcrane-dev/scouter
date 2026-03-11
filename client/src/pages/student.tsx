@@ -290,7 +290,7 @@ export default function StudentPage() {
             </div>
           )}
 
-          {!student.claimed && !isAuthenticated && (
+          {!isAuthenticated && (
             <div className="mt-3 pt-3 border-t border-white/5">
               <a
                 href="/auth/google"
@@ -298,7 +298,7 @@ export default function StudentPage() {
                 className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground font-mono transition-colors"
               >
                 <ShieldCheck className="w-3 h-3" />
-                is this you? login with @iitj.ac.in to claim
+                {student.claimed ? "login with @iitj.ac.in" : "is this you? login with @iitj.ac.in to claim"}
               </a>
             </div>
           )}

@@ -305,9 +305,7 @@ export async function registerRoutes(
   const hasGoogleAuth = !!(googleClientId && googleClientSecret);
 
   if (hasGoogleAuth) {
-    const callbackURL = process.env.NODE_ENV === "production"
-      ? `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}/auth/google/callback`
-      : `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}/auth/google/callback`;
+    const callbackURL = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}/auth/google/callback`;
 
     passport.use(new GoogleStrategy({
       clientID: googleClientId!,
@@ -330,6 +328,12 @@ export async function registerRoutes(
             pictureUrl: profile.photos?.[0]?.value,
             studentId: student?.id,
           });
+        } else if (!user.studentId) {
+          const student = await storage.getStudentByEmail(email);
+          if (student) {
+            await storage.updateUserStudentId(user.id, student.id);
+            user = { ...user, studentId: student.id };
+          }
         }
 
         return done(null, user);

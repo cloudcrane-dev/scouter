@@ -30,6 +30,8 @@ export interface IStorage {
   createUser(data: { googleId: string; email: string; name: string; pictureUrl?: string; studentId?: number }): Promise<User>;
   getUserByStudentId(studentId: number): Promise<User | undefined>;
 
+  updateUserStudentId(userId: number, studentId: number): Promise<void>;
+
   getSocialLinks(studentId: number): Promise<SocialLink[]>;
   setSocialLinks(studentId: number, links: { platform: string; url: string }[]): Promise<SocialLink[]>;
   invalidateCache(studentId: number): Promise<void>;
@@ -140,6 +142,10 @@ export class DatabaseStorage implements IStorage {
   async getUserByStudentId(studentId: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.studentId, studentId));
     return user || undefined;
+  }
+
+  async updateUserStudentId(userId: number, studentId: number): Promise<void> {
+    await db.update(users).set({ studentId }).where(eq(users.id, userId));
   }
 
   async getSocialLinks(studentId: number): Promise<SocialLink[]> {
