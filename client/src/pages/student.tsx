@@ -196,7 +196,16 @@ export default function StudentPage() {
           className="border border-white/8 bg-card p-5 mb-3"
         >
           <div className="flex items-start gap-4">
-            <div className="w-14 h-14 border border-white/15 flex items-center justify-center text-sm font-bold text-muted-foreground shrink-0 tracking-wider">
+            {student.pictureUrl ? (
+              <img
+                src={student.pictureUrl}
+                alt={student.name}
+                data-testid="img-student-avatar"
+                className="w-14 h-14 border border-white/15 object-cover shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
+              />
+            ) : null}
+            <div className={`w-14 h-14 border border-white/15 flex items-center justify-center text-sm font-bold text-muted-foreground shrink-0 tracking-wider ${student.pictureUrl ? "hidden" : ""}`}>
               {getInitials(student.name)}
             </div>
             <div className="flex-1 min-w-0">

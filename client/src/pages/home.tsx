@@ -201,7 +201,16 @@ export default function HomePage() {
                           className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/3 active:bg-white/5 text-left transition-colors duration-100 cursor-pointer border-b border-white/5 last:border-b-0"
                           onClick={() => handleSelect(student)}
                         >
-                          <div className="w-8 h-8 border border-white/10 flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0">
+                          {student.pictureUrl ? (
+                            <img
+                              src={student.pictureUrl}
+                              alt={student.name}
+                              data-testid={`img-student-${student.id}`}
+                              className="w-8 h-8 border border-white/10 object-cover shrink-0"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
+                            />
+                          ) : null}
+                          <div className={`w-8 h-8 border border-white/10 flex items-center justify-center text-[10px] font-bold text-muted-foreground shrink-0 ${student.pictureUrl ? "hidden" : ""}`}>
                             {getInitials(student.name)}
                           </div>
                           <div className="flex-1 min-w-0">

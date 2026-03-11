@@ -117,7 +117,16 @@ export default function LeaderboardPage() {
                   }`}>
                     {String(index + 1).padStart(2, "0")}
                   </span>
-                  <div className="w-8 h-8 border border-white/10 flex items-center justify-center text-[9px] font-bold text-muted-foreground shrink-0">
+                  {student.pictureUrl ? (
+                    <img
+                      src={student.pictureUrl}
+                      alt={student.name}
+                      data-testid={`img-leaderboard-${student.id}`}
+                      className="w-8 h-8 border border-white/10 object-cover shrink-0"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; (e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden"); }}
+                    />
+                  ) : null}
+                  <div className={`w-8 h-8 border border-white/10 flex items-center justify-center text-[9px] font-bold text-muted-foreground shrink-0 ${student.pictureUrl ? "hidden" : ""}`}>
                     {getInitials(student.name)}
                   </div>
                   <div className="flex-1 min-w-0">
