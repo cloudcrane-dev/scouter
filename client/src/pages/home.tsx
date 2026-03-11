@@ -24,7 +24,7 @@ export default function HomePage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 250);
+    const timer = setTimeout(() => setDebouncedQuery(query), 500);
     return () => clearTimeout(timer);
   }, [query]);
 
@@ -112,16 +112,16 @@ export default function HomePage() {
             <div className="inline-flex items-center gap-3 px-4 py-2 border border-white/8 bg-card font-mono" data-testid="search-limit-counter">
               <Shield className="w-3.5 h-3.5 text-muted-foreground" />
               <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">daily queries</span>
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">queries left</span>
                 <span className={`text-xs font-bold ${remaining <= 20 ? "text-foreground" : "text-muted-foreground"}`}>
-                  {used}/{limit}
+                  {remaining}/{limit}
                 </span>
               </div>
               <div className="w-20 h-1 bg-white/5 overflow-hidden">
                 <motion.div
                   className={`h-full ${remaining <= 20 ? "bg-foreground" : "bg-white/30"}`}
                   initial={{ width: 0 }}
-                  animate={{ width: `${100 - pct}%` }}
+                  animate={{ width: `${pct}%` }}
                   transition={{ duration: 0.5 }}
                 />
               </div>
