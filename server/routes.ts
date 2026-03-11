@@ -83,40 +83,42 @@ async function generateAIAnalysis(
   tavilyContext: string,
   feedbackContext: string
 ): Promise<string> {
-  const systemPrompt = `You are an intelligence analyst for the IIT Jodhpur Student Intelligence System. Your job is to build the most comprehensive dossier possible on a student from web data and peer intel.
+  const systemPrompt = `You are a strict fact-checker for the IIT Jodhpur Student Intelligence System.
 
-Instructions:
-- Extract EVERY concrete detail from the web results: specific projects, repos, roles, companies, publications, competition ranks, skills, technologies, club memberships, social handles.
-- Synthesize information across sources — connect GitHub activity to LinkedIn roles, match competition results to skills, etc.
-- When information is genuinely unavailable, state it briefly and move on. Do NOT pad sections with generic statements about what "typically indicates" or what "suggests". Only report what you actually found.
-- If a section has nothing concrete, write "No data found." and move on. Short is better than speculative.
-- Never fabricate information. Never hedge with "likely" or "typically" unless backed by actual evidence.
-- Be direct, concise, and specific.
+ABSOLUTE RULES:
+- ONLY state facts that are DIRECTLY and EXPLICITLY present in the provided web results or peer feedback. Quote the source when possible.
+- NEVER infer, assume, speculate, or guess. No "likely", "suggests", "typically indicates", "implies", "appears to", "seems to", "probably". These words are BANNED.
+- NEVER generate generic filler like "maintaining a LinkedIn presence indicates professional orientation". That is speculation, not fact.
+- If a section has ZERO verified facts from the sources, write exactly: "No verified data." — nothing else. Do NOT explain what could be found or suggest the user provide more info.
+- Keep it short. A section with one verified fact should be one line, not a paragraph.
+- Cite the source URL for each fact when available.
 
-Format your analysis with these sections:
-1. **Overview** — Who they are: program, batch year, department (if found). 2-3 sentences max.
-2. **Technical Profile** — Languages, frameworks, tools, GitHub repos, coding competition profiles, technical projects found online.
-3. **Professional Experience** — Internships, jobs, companies, roles, durations if available.
-4. **Achievements & Recognition** — Competition ranks, awards, publications, open source contributions, hackathon results.
-5. **Campus & Extracurriculars** — Clubs, societies, positions of responsibility, event organizing.
-6. **Peer Intel** — Summarize peer feedback if available. If none, write "No peer intel submitted."
-7. **Assessment** — 2-3 sentence overall picture based ONLY on concrete evidence found.
+Sections (skip entirely if no data):
+1. **Identity** — Name, roll number, batch, program, department. Only what is confirmed in sources.
+2. **Online Presence** — Exact links found: LinkedIn URL, GitHub URL, personal site, coding profiles. List them, nothing more.
+3. **Work & Internships** — Company names, role titles, durations. Only if explicitly stated in sources.
+4. **Projects & Code** — Specific repo names, project titles, tech stacks. Only if found in sources.
+5. **Achievements** — Specific awards, ranks, publications with names/numbers. Only if found.
+6. **Campus Activity** — Club names, positions, events. Only if found.
+7. **Peer Intel** — Direct quotes or summaries from submitted peer feedback. If none: "No peer intel submitted."
 
-Use markdown formatting.`;
+End with a one-line **Verdict** summarizing ONLY what was verified. If almost nothing was found, say so plainly.
+
+Use markdown. Be brutally concise.`;
 
   const identifiers = [`**Name:** ${student.name}`];
   if (student.rollNumber) identifiers.push(`**Roll Number:** ${student.rollNumber}`);
   if (student.email) identifiers.push(`**Email:** ${student.email}`);
 
-  const userPrompt = `Build a dossier on this IIT Jodhpur student:
+  const userPrompt = `Extract ONLY verified facts about this person from the sources below. Zero speculation.
 
 ${identifiers.join("\n")}
 
-**Web Intelligence:**
+**Sources (web search results):**
 ${tavilyContext || "No web results available."}
 
-**Peer Intel:**
-${feedbackContext || "No peer feedback available yet."}`;
+**Peer feedback submissions:**
+${feedbackContext || "None submitted."}`;
 
   const response = await openai.chat.completions.create({
     model: "gpt-5.2",
