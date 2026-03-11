@@ -90,22 +90,11 @@ async function searchGoogle(query: string): Promise<string> {
 }
 
 async function gatherWebContext(name: string, email?: string | null, rollNumber?: string | null): Promise<string> {
-  const queries: Promise<string>[] = [];
-
-  queries.push(searchTavily(`"${name}" IIT Jodhpur student profile achievements projects`));
-  queries.push(searchTavily(`"${name}" site:linkedin.com OR site:github.com OR site:codeforces.com OR site:leetcode.com`));
-
-  queries.push(searchGoogle(`"${name}" IIT Jodhpur`));
-  queries.push(searchGoogle(`"${name}" linkedin OR github OR portfolio`));
-
-  if (rollNumber) {
-    queries.push(searchTavily(`"${rollNumber}" IIT Jodhpur`));
-    queries.push(searchGoogle(`"${rollNumber}" IIT Jodhpur`));
-  }
-
-  if (email && !email.endsWith("@iitj.ac.in")) {
-    queries.push(searchTavily(`"${email}"`));
-  }
+  const searchQuery = `${name} IIT Jodhpur`;
+  const queries: Promise<string>[] = [
+    searchTavily(searchQuery),
+    searchGoogle(searchQuery),
+  ];
 
   const settled = await Promise.allSettled(queries);
   const seenUrls = new Set<string>();
