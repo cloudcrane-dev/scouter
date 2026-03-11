@@ -569,7 +569,7 @@ export async function registerRoutes(
 
   app.put("/api/students/:id/social-links", isAuthenticated, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
 
       const user = req.user as any;
