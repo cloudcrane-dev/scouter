@@ -16,8 +16,8 @@ async function searchTavily(query: string, includeDomains?: string[]): Promise<s
     const body: any = {
       api_key: apiKey,
       query,
-      max_results: 7,
-      search_depth: "advanced",
+      max_results: 5,
+      search_depth: "basic",
       include_answer: true,
     };
     if (includeDomains?.length) {
@@ -28,6 +28,7 @@ async function searchTavily(query: string, includeDomains?: string[]): Promise<s
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!response.ok) {
@@ -66,7 +67,9 @@ async function searchGoogle(query: string): Promise<string> {
       num: "7",
     });
 
-    const response = await fetch(`https://www.googleapis.com/customsearch/v1?${params}`);
+    const response = await fetch(`https://www.googleapis.com/customsearch/v1?${params}`, {
+      signal: AbortSignal.timeout(10000),
+    });
 
     if (!response.ok) {
       const text = await response.text();
