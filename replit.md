@@ -8,7 +8,7 @@ A mobile-friendly web application for scouting and analyzing IIT Jodhpur student
 - **Backend**: Express.js
 - **Database**: PostgreSQL with Drizzle ORM
 - **AI**: OpenAI GPT-5.2 via Replit AI Integrations (no API key needed)
-- **Search**: Tavily API + Google Custom Search API (dual-source, parallel)
+- **Search**: Tavily API + Serper (Google Search) API (dual-source, parallel)
 
 ## Key Features
 1. **Student Search** - Autocomplete search by name, email, or roll number with debounced dropdown
@@ -61,19 +61,18 @@ A mobile-friendly web application for scouting and analyzing IIT Jodhpur student
 - Search input sanitizes SQL wildcards (`%`, `_`) before ILIKE queries
 
 ## Web Search Pipeline
-- Runs Tavily and Google searches in parallel for each analysis
-- Tavily: advanced depth, 7 results per query (profile search + platform-specific search)
-- Google: 7 results per query (general + LinkedIn/GitHub/portfolio)
-- Roll number and email also searched when available
+- Runs Tavily and Serper (Google) searches in parallel for each analysis
+- Tavily: basic depth, 5 results per query
+- Serper: 7 results per query (Google search via serper.dev)
+- Single query: "{name} IIT Jodhpur" sent to both engines
 - Results deduplicated by URL across all sources
-- Google search is optional — if credentials aren't set, only Tavily is used
+- Either search engine is optional — if credentials aren't set, only the available one is used
 - Content moderation via GPT on all peer feedback submissions (blocks abuse, vulgar remarks, harassment)
 
 ## Environment Variables
 - `DATABASE_URL` - PostgreSQL connection string (auto-provisioned)
 - `TAVILY_API_KEY` - Tavily API key for web search
-- `GOOGLE_SEARCH_API_KEY` - Google Custom Search API key (optional, enhances results)
-- `GOOGLE_SEARCH_CX` - Google Programmable Search Engine ID (optional)
+- `SERPER_API_KEY` - Serper.dev API key for Google search results
 - `AI_INTEGRATIONS_OPENAI_API_KEY` - Auto-set by Replit AI Integrations
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` - Auto-set by Replit AI Integrations
 - `SESSION_SECRET` - Session secret

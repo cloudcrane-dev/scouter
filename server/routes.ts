@@ -54,40 +54,38 @@ async function searchTavily(query: string, includeDomains?: string[]): Promise<s
   }
 }
 
-async function searchGoogle(query: string): Promise<string> {
-  const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
-  const cx = process.env.GOOGLE_SEARCH_CX;
-  if (!apiKey || !cx) return "";
+async function searchSerper(query: string): Promise<string> {
+  const apiKey = process.env.SERPER_API_KEY;
+  if (!apiKey) return "";
 
   try {
-    const params = new URLSearchParams({
-      key: apiKey,
-      cx,
-      q: query,
-      num: "7",
-    });
-
-    const response = await fetch(`https://www.googleapis.com/customsearch/v1?${params}`, {
+    const response = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: {
+        "X-API-KEY": apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ q: query, num: 7 }),
       signal: AbortSignal.timeout(10000),
     });
 
     if (!response.ok) {
       const text = await response.text();
-      console.error("Google Search API error:", text);
+      console.error("Serper API error:", text);
       return "";
     }
 
     const data = await response.json();
     let context = "";
-    if (data.items) {
-      for (const item of data.items) {
+    if (data.organic) {
+      for (const item of data.organic) {
         const snippet = item.snippet || "";
         context += `Source: ${item.title} (${item.link})\n${snippet}\n\n`;
       }
     }
     return context;
   } catch (error) {
-    console.error("Google Search error:", error);
+    console.error("Serper search error:", error);
     return "";
   }
 }
@@ -96,7 +94,7 @@ async function gatherWebContext(name: string, email?: string | null, rollNumber?
   const searchQuery = `${name} IIT Jodhpur`;
   const queries: Promise<string>[] = [
     searchTavily(searchQuery),
-    searchGoogle(searchQuery),
+    searchSerper(searchQuery),
   ];
 
   const settled = await Promise.allSettled(queries);
