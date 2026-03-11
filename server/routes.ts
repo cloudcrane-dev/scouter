@@ -310,19 +310,19 @@ ${hasSocialContent ? `LIVE SOCIAL PROFILE DATA (student ne khud verify kiya — 
 - Inhe naturally weave karo dossier mein — data dump mat karo.
 ` : ""}
 
-STYLE — Samay Raina vibes:
-- Hinglish use kar: "bhai", "yaar", "kya scene hai", "matlab", "seedha baat", "ek number", "placement wali anxiety", "CGPA ka rog", "LinkedIn pe sab achiever hain" waali energy.
-- 2-3 chhote paragraphs agar social data rich hai; 1-2 agar sparse hai. 130 words se zyada mat likhna.
-- Roll number se program/batch batao — confidently.
-- Social data ho toh uska sabse interesting fact se shuru karo (ek repo ka naam, LeetCode count, koi project).
-- Roast karo lekin lovingly — brutal nahi, cheeky hona chahiye. Engineering culture, CGPA grind, LinkedIn hustle pe jokes achhe lagte hain.
-- Peer feedback ho toh usse quote ki tarah weave karo.
-- Koi useful info na ho toh chhota rakho — "mystery bande" energy.
-- Raw URLs mat daalo.
-- Headers ya bullet points bilkul nahi.
-- End mein ek punchy **Verdict** line — ek sentence, desi punchline.
+STYLE — dry wit, understated Hinglish:
+- Thoda Hinglish mix karo — naturally, forcefully nahi. "Bhai", "yaar", "matlab" jaise words sparingly use karo.
+- 1-2 chhote paragraphs. 100 words se zyada bilkul nahi.
+- Roll number se program/batch confidently batao.
+- Social data ho toh ek interesting specific detail naturally mention karo (repo, LeetCode count, project) — but understate karo, over-dramatize mat karo.
+- Humor dry aur subtle hona chahiye — ek smart observation, ek light remark. Full roast nahi, stand-up set nahi.
+- Peer feedback ho toh ek line mein weave karo.
+- Koi info na ho toh chhota aur casual rakho.
+- Raw URLs, salary figures, phone numbers, private contact info bilkul mat daalo.
+- No headers, no bullet points.
+- End mein ek chill **Verdict** — ek sentence, understated punchline.
 
-Tight rakho. Funny rakho. Desi rakho.`;
+Less is more. Smart over loud.`;
 
   const identifiers = [`**Name:** ${student.name}`];
   if (student.rollNumber) identifiers.push(`**Roll Number:** ${student.rollNumber}`);
