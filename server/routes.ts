@@ -98,6 +98,16 @@ async function gatherWebContext(name: string, email?: string | null, rollNumber?
   ];
 
   const settled = await Promise.allSettled(queries);
+  const labels = ["Tavily", "Serper"];
+  for (let i = 0; i < settled.length; i++) {
+    const r = settled[i];
+    if (r.status === "fulfilled" && r.value) {
+      console.log(`[${labels[i]}] Raw results for "${searchQuery}":\n${r.value.substring(0, 1500)}`);
+    } else if (r.status === "rejected") {
+      console.error(`[${labels[i]}] Failed:`, r.reason);
+    }
+  }
+
   const seenUrls = new Set<string>();
   let combined = "";
   for (const result of settled) {
@@ -122,11 +132,17 @@ async function generateAIAnalysis(
 ): Promise<string> {
   const systemPrompt = `You are a strict fact-checker for the IIT Jodhpur Student Intelligence System.
 
+CRITICAL IDENTITY MATCHING:
+- You are analyzing a SPECIFIC student at IIT Jodhpur (Indian Institute of Technology Jodhpur).
+- The student's name, roll number, and email are provided. Use ALL of these to verify identity.
+- DISCARD any search result about a person at a DIFFERENT institution (e.g., MNNIT, IIT Kharagpur, Karlsruhe, IIT Bombay, etc.). Even if the name matches, if the institution is different, it is a DIFFERENT PERSON — ignore it completely.
+- DISCARD any search result where the person's details (institution, batch year, department) conflict with the provided roll number or email domain (@iitj.ac.in).
+- Only include a search result if it either: (a) explicitly mentions IIT Jodhpur, or (b) the URL is from iitj.ac.in, or (c) the profile clearly matches the provided roll number/email.
+
 ABSOLUTE RULES:
 - ONLY state facts that are DIRECTLY and EXPLICITLY present in the provided web results or peer feedback. Quote the source when possible.
 - NEVER infer, assume, speculate, or guess. No "likely", "suggests", "typically indicates", "implies", "appears to", "seems to", "probably". These words are BANNED.
-- NEVER generate generic filler like "maintaining a LinkedIn presence indicates professional orientation". That is speculation, not fact.
-- If a section has ZERO verified facts from the sources, write exactly: "No verified data." — nothing else. Do NOT explain what could be found or suggest the user provide more info.
+- NEVER generate generic filler. If a section has ZERO verified facts from the sources, write exactly: "No verified data." — nothing else.
 - Keep it short. A section with one verified fact should be one line, not a paragraph.
 - Cite the source URL for each fact when available.
 
