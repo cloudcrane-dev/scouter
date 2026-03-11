@@ -258,10 +258,6 @@ export async function registerRoutes(
       if (!query || query.length < 2) {
         return res.json([]);
       }
-      const ip = getClientIP(req);
-      if (!consumeSearch(ip)) {
-        return res.status(429).json({ error: "Daily search limit reached (200/day). Try again tomorrow." });
-      }
       const results = await storage.searchStudents(query);
       res.json(results);
     } catch (error) {
@@ -309,6 +305,11 @@ export async function registerRoutes(
 
       if (cachedResponse && cachedResponse.feedbackCountAtGeneration === student.feedbackCount) {
         return res.json({ analysis: cachedResponse.response, cached: true });
+      }
+
+      const ip = getClientIP(req);
+      if (!consumeSearch(ip)) {
+        return res.status(429).json({ error: "Daily analysis limit reached (200/day). Try again tomorrow." });
       }
 
       const tavilyContext = await gatherWebContext(student.name, student.email, student.rollNumber);

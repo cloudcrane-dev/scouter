@@ -121,9 +121,13 @@ export default function StudentPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/students", id.toString(), "analyze"], data);
+      queryClient.invalidateQueries({ queryKey: ["/api/search-limit"] });
     },
-    onError: () => {
-      toast({ title: "error", description: "analysis failed. try again.", variant: "destructive" });
+    onError: (error: any) => {
+      const msg = error?.message?.includes("429")
+        ? "daily scan limit reached. try again tomorrow."
+        : "analysis failed. try again.";
+      toast({ title: "error", description: msg, variant: "destructive" });
     },
   });
 

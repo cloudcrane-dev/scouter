@@ -53,12 +53,8 @@ export default function HomePage() {
   useEffect(() => {
     if (error && (error as any)?.message?.includes("429")) {
       setLimitHit(true);
-      toast({ title: "limit reached", description: "Daily search quota exhausted. Try tomorrow.", variant: "destructive" });
     }
-    if (results) {
-      queryClient.invalidateQueries({ queryKey: ["/api/search-limit"] });
-    }
-  }, [error, results, toast]);
+  }, [error]);
 
   const { data: stats } = useQuery<{ totalStudents: number }>({
     queryKey: ["/api/stats"],
@@ -112,7 +108,7 @@ export default function HomePage() {
             <div className="inline-flex items-center gap-3 px-4 py-2 border border-white/8 bg-card font-mono" data-testid="search-limit-counter">
               <Shield className="w-3.5 h-3.5 text-muted-foreground" />
               <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">queries left</span>
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground">scans left</span>
                 <span className={`text-xs font-bold ${remaining <= 20 ? "text-foreground" : "text-muted-foreground"}`}>
                   {remaining}/{limit}
                 </span>
