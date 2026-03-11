@@ -10,6 +10,7 @@ export const students = pgTable("students", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
+  rollNumber: text("roll_number"),
   phone: text("phone"),
   pictureUrl: text("picture_url"),
   searchCount: integer("search_count").default(0).notNull(),

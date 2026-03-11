@@ -26,11 +26,13 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   async searchStudents(query: string): Promise<Student[]> {
+    if (!query) return [];
     const searchPattern = `%${query}%`;
     return db.select().from(students).where(
       or(
         ilike(students.name, searchPattern),
         ilike(students.email, searchPattern),
+        ilike(students.rollNumber, searchPattern),
       )
     ).limit(10);
   }
@@ -88,7 +90,9 @@ export class DatabaseStorage implements IStorage {
 
   async getLeaderboard(sortBy: "searches" | "feedback", limit = 20): Promise<Student[]> {
     const orderCol = sortBy === "searches" ? students.searchCount : students.feedbackCount;
-    return db.select().from(students).orderBy(desc(orderCol)).limit(limit);
+    return db.select().from(students)
+      .where(sortBy === "searches" ? sql`${students.searchCount} > 0` : sql`${students.feedbackCount} > 0`)
+      .orderBy(desc(orderCol)).limit(limit);
   }
 
   async getStudentCount(): Promise<number> {

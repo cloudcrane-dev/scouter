@@ -83,26 +83,30 @@ Please provide a detailed, insightful analysis.`;
 }
 
 const DAILY_SEARCH_LIMIT = 200;
-let dailySearchCount = 0;
-let lastResetDate = new Date().toDateString();
+const ipSearchCounts = new Map<string, { count: number; date: string }>();
 
-function getDailySearchInfo() {
-  const today = new Date().toDateString();
-  if (today !== lastResetDate) {
-    dailySearchCount = 0;
-    lastResetDate = today;
-  }
-  return { used: dailySearchCount, limit: DAILY_SEARCH_LIMIT, remaining: DAILY_SEARCH_LIMIT - dailySearchCount };
+function getClientIP(req: any): string {
+  return req.ip || req.socket?.remoteAddress || "unknown";
 }
 
-function consumeSearch(): boolean {
+function getIPSearchInfo(ip: string) {
   const today = new Date().toDateString();
-  if (today !== lastResetDate) {
-    dailySearchCount = 0;
-    lastResetDate = today;
+  const entry = ipSearchCounts.get(ip);
+  if (!entry || entry.date !== today) {
+    return { used: 0, limit: DAILY_SEARCH_LIMIT, remaining: DAILY_SEARCH_LIMIT };
   }
-  if (dailySearchCount >= DAILY_SEARCH_LIMIT) return false;
-  dailySearchCount++;
+  return { used: entry.count, limit: DAILY_SEARCH_LIMIT, remaining: DAILY_SEARCH_LIMIT - entry.count };
+}
+
+function consumeSearch(ip: string): boolean {
+  const today = new Date().toDateString();
+  const entry = ipSearchCounts.get(ip);
+  if (!entry || entry.date !== today) {
+    ipSearchCounts.set(ip, { count: 1, date: today });
+    return true;
+  }
+  if (entry.count >= DAILY_SEARCH_LIMIT) return false;
+  entry.count++;
   return true;
 }
 
@@ -111,17 +115,20 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.get("/api/search-limit", (_req, res) => {
-    res.json(getDailySearchInfo());
+  app.get("/api/search-limit", (req, res) => {
+    const ip = getClientIP(req);
+    res.json(getIPSearchInfo(ip));
   });
 
   app.get("/api/students/search", async (req, res) => {
     try {
-      const query = (req.query.q as string) || "";
+      const rawQuery = (req.query.q as string) || "";
+      const query = rawQuery.replace(/[%_]/g, "").trim();
       if (!query || query.length < 2) {
         return res.json([]);
       }
-      if (!consumeSearch()) {
+      const ip = getClientIP(req);
+      if (!consumeSearch(ip)) {
         return res.status(429).json({ error: "Daily search limit reached (200/day). Try again tomorrow." });
       }
       const results = await storage.searchStudents(query);

@@ -203,10 +203,16 @@ export default function StudentPage() {
               <h1 className="text-base font-bold tracking-tight mb-0.5 font-mono" data-testid="text-student-name" style={{ fontVariationSettings: "'wght' 700" }}>
                 {student.name}
               </h1>
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2 font-mono">
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1 font-mono">
                 <Mail className="w-3 h-3 shrink-0" />
                 <span className="truncate" data-testid="text-student-email">{student.email}</span>
               </div>
+              {student.rollNumber && (
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2 font-mono">
+                  <Terminal className="w-3 h-3 shrink-0" />
+                  <span data-testid="text-student-roll">{student.rollNumber}</span>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono" data-testid="badge-search-count">
                   <Eye className="w-3 h-3" />
