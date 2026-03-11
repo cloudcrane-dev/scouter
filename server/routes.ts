@@ -97,14 +97,22 @@ async function gatherWebContext(name: string, email?: string | null, rollNumber?
     searchSerper(searchQuery),
   ];
 
+  if (rollNumber) {
+    queries.push(searchSerper(`"${rollNumber}" IIT Jodhpur`));
+  }
+  if (email) {
+    queries.push(searchSerper(`"${email}"`));
+  }
+
   const settled = await Promise.allSettled(queries);
-  const labels = ["Tavily", "Serper"];
+  const labels = ["Tavily", "Serper-name", "Serper-roll", "Serper-email"];
   for (let i = 0; i < settled.length; i++) {
     const r = settled[i];
+    const label = labels[i] || `Query-${i}`;
     if (r.status === "fulfilled" && r.value) {
-      console.log(`[${labels[i]}] Raw results for "${searchQuery}":\n${r.value.substring(0, 1500)}`);
+      console.log(`[${label}] Raw results:\n${r.value.substring(0, 1500)}`);
     } else if (r.status === "rejected") {
-      console.error(`[${labels[i]}] Failed:`, r.reason);
+      console.error(`[${label}] Failed:`, r.reason);
     }
   }
 
