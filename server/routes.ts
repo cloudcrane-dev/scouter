@@ -65,7 +65,7 @@ async function searchSerper(query: string): Promise<string> {
         "X-API-KEY": apiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ q: query, num: 10, gl: "in", hl: "en" }),
+      body: JSON.stringify({ q: query, num: 10, gl: "us", hl: "en" }),
       signal: AbortSignal.timeout(10000),
     });
 
