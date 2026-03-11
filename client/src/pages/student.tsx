@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Student } from "@shared/schema";
@@ -110,6 +111,7 @@ export default function StudentPage() {
   const id = parseInt(params.id || "0");
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { isAuthenticated, user } = useAuth();
   const [feedbackContent, setFeedbackContent] = useState("");
 
   const { data: student, isLoading: studentLoading } = useQuery<StudentWithLinks>({
@@ -264,7 +266,7 @@ export default function StudentPage() {
             </div>
           </div>
 
-          {socialLinks.length > 0 && (
+          {student.claimed && socialLinks.length > 0 && (
             <div className="mt-3 pt-3 border-t border-white/5">
               <div className="flex flex-wrap gap-2">
                 {socialLinks.map((link, i) => {
@@ -285,6 +287,32 @@ export default function StudentPage() {
                   );
                 })}
               </div>
+            </div>
+          )}
+
+          {!student.claimed && !isAuthenticated && (
+            <div className="mt-3 pt-3 border-t border-white/5">
+              <a
+                href="/auth/google"
+                data-testid="button-claim-profile"
+                className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground font-mono transition-colors"
+              >
+                <ShieldCheck className="w-3 h-3" />
+                is this you? login with @iitj.ac.in to claim
+              </a>
+            </div>
+          )}
+
+          {!student.claimed && isAuthenticated && user?.studentId === id && (
+            <div className="mt-3 pt-3 border-t border-white/5">
+              <button
+                onClick={() => navigate("/profile")}
+                data-testid="button-setup-profile"
+                className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground font-mono transition-colors cursor-pointer"
+              >
+                <ShieldCheck className="w-3 h-3" />
+                add your social links to claim this profile
+              </button>
             </div>
           )}
         </motion.div>
