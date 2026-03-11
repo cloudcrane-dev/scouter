@@ -633,7 +633,8 @@ export async function registerRoutes(
       if (!student) return res.status(404).json({ error: "Student not found" });
 
       const currentFeedback = await storage.getFeedback(id);
-      const cachedResponse = await storage.getCachedResponse(id);
+      const force = req.query.force === "true";
+      const cachedResponse = force ? null : await storage.getCachedResponse(id);
 
       if (cachedResponse && cachedResponse.feedbackCountAtGeneration === student.feedbackCount) {
         return res.json({ analysis: cachedResponse.response, cached: true });

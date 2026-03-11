@@ -133,8 +133,9 @@ export default function StudentPage() {
   });
 
   const analyzeMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/students/${id}/analyze`);
+    mutationFn: async (force = false) => {
+      const url = force ? `/api/students/${id}/analyze?force=true` : `/api/students/${id}/analyze`;
+      const res = await apiRequest("POST", url);
       return res.json();
     },
     onSuccess: (data) => {
@@ -332,7 +333,7 @@ export default function StudentPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => analyzeMutation.mutate()}
+                onClick={() => analyzeMutation.mutate(true)}
                 disabled={analyzeMutation.isPending}
                 data-testid="button-refresh-analysis"
                 className="text-[10px] text-muted-foreground rounded-none font-mono"
