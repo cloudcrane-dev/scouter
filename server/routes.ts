@@ -92,15 +92,13 @@ async function searchSerper(query: string): Promise<string> {
 
 async function gatherWebContext(name: string, email?: string | null, rollNumber?: string | null): Promise<string> {
   const searchQuery = `${name} IIT Jodhpur`;
-  const siteQuery = `site:iitj.ac.in "${name}"`;
   const queries: Promise<string>[] = [
     searchTavily(searchQuery),
     searchSerper(searchQuery),
-    searchSerper(siteQuery),
   ];
 
   const settled = await Promise.allSettled(queries);
-  const labels = ["Tavily", "Serper", "Serper-site:iitj"];
+  const labels = ["Tavily", "Serper"];
   for (let i = 0; i < settled.length; i++) {
     const r = settled[i];
     if (r.status === "fulfilled" && r.value) {
