@@ -8,19 +8,25 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-async function searchTavily(query: string): Promise<string> {
+async function searchTavily(query: string, includeDomains?: string[]): Promise<string> {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) throw new Error("TAVILY_API_KEY not set");
+
+  const body: any = {
+    api_key: apiKey,
+    query,
+    max_results: 7,
+    search_depth: "advanced",
+    include_answer: true,
+  };
+  if (includeDomains?.length) {
+    body.include_domains = includeDomains;
+  }
 
   const response = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query,
-      max_results: 5,
-      include_answer: true,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -36,39 +42,81 @@ async function searchTavily(query: string): Promise<string> {
   }
   if (data.results) {
     for (const result of data.results) {
-      context += `Source: ${result.title}\n${result.content}\n\n`;
+      context += `Source: ${result.title} (${result.url})\n${result.content}\n\n`;
     }
   }
   return context || "No web results found.";
 }
 
+async function gatherWebContext(name: string, email?: string | null, rollNumber?: string | null): Promise<string> {
+  const queries: Promise<string>[] = [];
+
+  queries.push(searchTavily(`"${name}" IIT Jodhpur student profile achievements projects`));
+
+  queries.push(searchTavily(`"${name}" site:linkedin.com OR site:github.com OR site:codeforces.com OR site:leetcode.com`));
+
+  if (rollNumber) {
+    queries.push(searchTavily(`"${rollNumber}" IIT Jodhpur`));
+  }
+
+  if (email && !email.endsWith("@iitj.ac.in")) {
+    queries.push(searchTavily(`"${email}"`));
+  }
+
+  const results = await Promise.all(queries);
+  const seen = new Set<string>();
+  let combined = "";
+  for (const r of results) {
+    for (const line of r.split("\n\n")) {
+      const trimmed = line.trim();
+      if (trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        combined += trimmed + "\n\n";
+      }
+    }
+  }
+  return combined || "No web results found.";
+}
+
 async function generateAIAnalysis(
-  studentName: string,
+  student: { name: string; email?: string | null; rollNumber?: string | null },
   tavilyContext: string,
   feedbackContext: string
 ): Promise<string> {
-  const systemPrompt = `You are an intelligent student profiling assistant for IIT Jodhpur. Given information about a student from web searches and peer feedback, provide a comprehensive analysis including:
+  const systemPrompt = `You are an intelligence analyst for the IIT Jodhpur Student Intelligence System. Your job is to build the most comprehensive dossier possible on a student from web data and peer intel.
 
-1. **Overview**: A brief introduction about the person
-2. **Strengths**: Key strengths based on available information
-3. **Areas of Interest**: Academic or extracurricular interests
-4. **Notable Achievements**: Any achievements found online or mentioned in feedback
-5. **Peer Insights**: Summary of what peers say about them (if feedback available)
-6. **Overall Impression**: A balanced, respectful summary
+Instructions:
+- Extract EVERY concrete detail from the web results: specific projects, repos, roles, companies, publications, competition ranks, skills, technologies, club memberships, social handles.
+- Synthesize information across sources — connect GitHub activity to LinkedIn roles, match competition results to skills, etc.
+- When information is genuinely unavailable, state it briefly and move on. Do NOT pad sections with generic statements about what "typically indicates" or what "suggests". Only report what you actually found.
+- If a section has nothing concrete, write "No data found." and move on. Short is better than speculative.
+- Never fabricate information. Never hedge with "likely" or "typically" unless backed by actual evidence.
+- Be direct, concise, and specific.
 
-Be factual and respectful. If information is limited, say so honestly. Never fabricate information. Format using markdown.`;
+Format your analysis with these sections:
+1. **Overview** — Who they are: program, batch year, department (if found). 2-3 sentences max.
+2. **Technical Profile** — Languages, frameworks, tools, GitHub repos, coding competition profiles, technical projects found online.
+3. **Professional Experience** — Internships, jobs, companies, roles, durations if available.
+4. **Achievements & Recognition** — Competition ranks, awards, publications, open source contributions, hackathon results.
+5. **Campus & Extracurriculars** — Clubs, societies, positions of responsibility, event organizing.
+6. **Peer Intel** — Summarize peer feedback if available. If none, write "No peer intel submitted."
+7. **Assessment** — 2-3 sentence overall picture based ONLY on concrete evidence found.
 
-  const userPrompt = `Analyze this student from IIT Jodhpur:
+Use markdown formatting.`;
 
-**Name:** ${studentName}
+  const identifiers = [`**Name:** ${student.name}`];
+  if (student.rollNumber) identifiers.push(`**Roll Number:** ${student.rollNumber}`);
+  if (student.email) identifiers.push(`**Email:** ${student.email}`);
 
-**Web Search Results:**
+  const userPrompt = `Build a dossier on this IIT Jodhpur student:
+
+${identifiers.join("\n")}
+
+**Web Intelligence:**
 ${tavilyContext || "No web results available."}
 
-**Peer Feedback:**
-${feedbackContext || "No peer feedback available yet."}
-
-Please provide a detailed, insightful analysis.`;
+**Peer Intel:**
+${feedbackContext || "No peer feedback available yet."}`;
 
   const response = await openai.chat.completions.create({
     model: "gpt-5.2",
@@ -180,8 +228,7 @@ export async function registerRoutes(
         return res.json({ analysis: cachedResponse.response, cached: true });
       }
 
-      const tavilyQuery = `${student.name} IIT Jodhpur`;
-      const tavilyContext = await searchTavily(tavilyQuery);
+      const tavilyContext = await gatherWebContext(student.name, student.email, student.rollNumber);
 
       const feedbackContext = currentFeedback.length > 0
         ? currentFeedback.map((f, i) =>
@@ -189,7 +236,11 @@ export async function registerRoutes(
           ).join("\n")
         : "";
 
-      const analysis = await generateAIAnalysis(student.name, tavilyContext, feedbackContext);
+      const analysis = await generateAIAnalysis(
+        { name: student.name, email: student.email, rollNumber: student.rollNumber },
+        tavilyContext,
+        feedbackContext
+      );
 
       await storage.saveCachedResponse(id, analysis, student.feedbackCount);
 
