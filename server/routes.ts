@@ -297,6 +297,12 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+
+      const ip = getClientIP(req);
+      if (!consumeSearch(ip)) {
+        return res.status(429).json({ error: "Daily scan limit reached (200/day). Try again tomorrow." });
+      }
+
       const student = await storage.getStudent(id);
       if (!student) return res.status(404).json({ error: "Student not found" });
 
@@ -305,11 +311,6 @@ export async function registerRoutes(
 
       if (cachedResponse && cachedResponse.feedbackCountAtGeneration === student.feedbackCount) {
         return res.json({ analysis: cachedResponse.response, cached: true });
-      }
-
-      const ip = getClientIP(req);
-      if (!consumeSearch(ip)) {
-        return res.status(429).json({ error: "Daily analysis limit reached (200/day). Try again tomorrow." });
       }
 
       const tavilyContext = await gatherWebContext(student.name, student.email, student.rollNumber);
