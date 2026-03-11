@@ -65,7 +65,7 @@ async function searchSerper(query: string): Promise<string> {
         "X-API-KEY": apiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ q: query, num: 7 }),
+      body: JSON.stringify({ q: query, num: 10, gl: "in", hl: "en" }),
       signal: AbortSignal.timeout(10000),
     });
 
@@ -135,9 +135,9 @@ async function generateAIAnalysis(
 CRITICAL IDENTITY MATCHING:
 - You are analyzing a SPECIFIC student at IIT Jodhpur (Indian Institute of Technology Jodhpur).
 - The student's name, roll number, and email are provided. Use ALL of these to verify identity.
-- DISCARD any search result about a person at a DIFFERENT institution (e.g., MNNIT, IIT Kharagpur, Karlsruhe, IIT Bombay, etc.). Even if the name matches, if the institution is different, it is a DIFFERENT PERSON — ignore it completely.
-- DISCARD any search result where the person's details (institution, batch year, department) conflict with the provided roll number or email domain (@iitj.ac.in).
-- Only include a search result if it either: (a) explicitly mentions IIT Jodhpur, or (b) the URL is from iitj.ac.in, or (c) the profile clearly matches the provided roll number/email.
+- DISCARD any search result that is CLEARLY about a different person at a DIFFERENT institution (e.g., a LinkedIn profile that says "MNNIT" or "IIT Kharagpur" or "Chandigarh University" — these are different people with the same name).
+- INCLUDE results that: (a) explicitly mention IIT Jodhpur or iitj.ac.in, (b) match the student's roll number or email, (c) mention the student's name WITHOUT specifying a conflicting institution (these may still be the right person).
+- When unsure if a result is the right person, include it but note the uncertainty. Prefer results from iitj.ac.in domains — these are authoritative.
 
 ABSOLUTE RULES:
 - ONLY state facts that are DIRECTLY and EXPLICITLY present in the provided web results or peer feedback. Quote the source when possible.
