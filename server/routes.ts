@@ -132,6 +132,48 @@ ${feedbackContext || "None submitted."}`;
   return response.choices[0]?.message?.content || "Unable to generate analysis.";
 }
 
+async function moderateContent(text: string): Promise<{ allowed: boolean; reason: string }> {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      messages: [
+        {
+          role: "system",
+          content: `You are a content moderator. Evaluate if the following peer feedback about a student is appropriate. 
+
+REJECT if it contains ANY of:
+- Vulgar language, slurs, profanity, or sexual content
+- Personal attacks, bullying, threats, or harassment
+- Discriminatory remarks (caste, religion, gender, race, sexuality)
+- Defamatory or false accusations
+- Doxxing or sharing private information (phone numbers, addresses, passwords)
+- Spam, gibberish, or completely irrelevant content
+
+ALLOW if it is:
+- Constructive feedback (positive or negative) about skills, work ethic, academics, projects, personality traits
+- Honest opinions expressed respectfully, even if critical
+
+Respond with EXACTLY one line:
+ALLOW — if the content is acceptable
+REJECT: <short reason> — if the content violates the rules`
+        },
+        { role: "user", content: text }
+      ],
+      max_completion_tokens: 50,
+    });
+
+    const result = (response.choices[0]?.message?.content || "").trim();
+    if (result.startsWith("REJECT")) {
+      const reason = result.replace(/^REJECT:?\s*/, "").trim() || "Content violates community guidelines.";
+      return { allowed: false, reason: `Submission rejected: ${reason}` };
+    }
+    return { allowed: true, reason: "" };
+  } catch (error) {
+    console.error("Moderation error:", error);
+    return { allowed: true, reason: "" };
+  }
+}
+
 const DAILY_SEARCH_LIMIT = 200;
 const ipSearchCounts = new Map<string, { count: number; date: string }>();
 
@@ -278,6 +320,15 @@ export async function registerRoutes(
       if (content.trim().length > 2000) {
         return res.status(400).json({ error: "Feedback must be under 2000 characters" });
       }
+      if (content.trim().length < 10) {
+        return res.status(400).json({ error: "Feedback must be at least 10 characters" });
+      }
+
+      const moderation = await moderateContent(content.trim());
+      if (!moderation.allowed) {
+        return res.status(400).json({ error: moderation.reason });
+      }
+
       const fb = await storage.addFeedback({
         studentId: id,
         content: content.trim(),
