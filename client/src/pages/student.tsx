@@ -6,8 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Eye, MessageSquare, Mail, Sparkles,
-  Send, RefreshCw, User, Terminal,
+  Send, RefreshCw, User, Terminal, ShieldCheck, ExternalLink,
 } from "lucide-react";
+import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -89,6 +90,21 @@ function TerminalLoader() {
   );
 }
 
+const PLATFORM_ICONS: Record<string, { icon: any; label: string }> = {
+  github: { icon: SiGithub, label: "GitHub" },
+  linkedin: { icon: SiLinkedin, label: "LinkedIn" },
+  leetcode: { icon: SiLeetcode, label: "LeetCode" },
+  behance: { icon: SiBehance, label: "Behance" },
+  twitter: { icon: null, label: "X" },
+  portfolio: { icon: null, label: "Portfolio" },
+  other: { icon: null, label: "Link" },
+};
+
+interface StudentWithLinks extends Student {
+  socialLinks?: { platform: string; url: string }[];
+  claimed?: boolean;
+}
+
 export default function StudentPage() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id || "0");
@@ -96,7 +112,7 @@ export default function StudentPage() {
   const { toast } = useToast();
   const [feedbackContent, setFeedbackContent] = useState("");
 
-  const { data: student, isLoading: studentLoading } = useQuery<Student>({
+  const { data: student, isLoading: studentLoading } = useQuery<StudentWithLinks>({
     queryKey: ["/api/students", id.toString()],
     enabled: id > 0,
   });
@@ -178,6 +194,8 @@ export default function StudentPage() {
     );
   }
 
+  const socialLinks = student.socialLinks || [];
+
   return (
     <div className="min-h-screen relative z-10">
       <div className="relative max-w-xl mx-auto px-4 py-4">
@@ -213,9 +231,16 @@ export default function StudentPage() {
               {getInitials(student.name)}
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-base font-bold tracking-tight mb-0.5 font-mono" data-testid="text-student-name" style={{ fontVariationSettings: "'wght' 700" }}>
-                {student.name}
-              </h1>
+              <div className="flex items-center gap-2 mb-0.5">
+                <h1 className="text-base font-bold tracking-tight font-mono" data-testid="text-student-name" style={{ fontVariationSettings: "'wght' 700" }}>
+                  {student.name}
+                </h1>
+                {student.claimed && (
+                  <span data-testid="badge-verified" aria-label="Verified profile">
+                    <ShieldCheck className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1 font-mono">
                 <Mail className="w-3 h-3 shrink-0" />
                 <span className="truncate" data-testid="text-student-email">{student.email}</span>
@@ -238,6 +263,30 @@ export default function StudentPage() {
               </div>
             </div>
           </div>
+
+          {socialLinks.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-white/5">
+              <div className="flex flex-wrap gap-2">
+                {socialLinks.map((link, i) => {
+                  const meta = PLATFORM_ICONS[link.platform] || PLATFORM_ICONS.other;
+                  const Icon = meta.icon;
+                  return (
+                    <a
+                      key={i}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid={`social-link-${link.platform}`}
+                      className="inline-flex items-center gap-1.5 px-2 py-1 border border-white/8 hover:border-white/20 text-[10px] text-muted-foreground hover:text-foreground font-mono transition-all duration-150"
+                    >
+                      {Icon ? <Icon className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
+                      {meta.label}
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </motion.div>
 
         <motion.div

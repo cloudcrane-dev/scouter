@@ -1,7 +1,11 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import OpenAI from "openai";
+import passport from "passport";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -136,7 +140,8 @@ async function gatherWebContext(name: string, email?: string | null, rollNumber?
 async function generateAIAnalysis(
   student: { name: string; email?: string | null; rollNumber?: string | null },
   tavilyContext: string,
-  feedbackContext: string
+  feedbackContext: string,
+  verifiedLinksContext: string
 ): Promise<string> {
   const systemPrompt = `You are a chill analyst for the IIT Jodhpur Student Intelligence System. Write a brief, mildly witty dossier about a student.
 
@@ -149,6 +154,9 @@ SEARCH RESULT FILTERING:
 - DISCARD any result clearly about a DIFFERENT person at a different institution (MNNIT, IIT Kharagpur, Karlsruhe, Chandigarh University, etc.).
 - INCLUDE results that mention IIT Jodhpur, iitj.ac.in, or match the student's roll/email.
 - Results mentioning the name without a conflicting institution can be included cautiously.
+
+VERIFIED LINKS:
+- If the student has self-reported social links (marked as "VERIFIED — self-reported"), treat these as trusted. Mention them naturally (e.g., "has a LinkedIn presence" or "active on GitHub").
 
 STYLE:
 - Write 1-2 short paragraphs. Keep it under 80 words total.
@@ -166,15 +174,18 @@ Keep it tight. Less is more.`;
   if (student.rollNumber) identifiers.push(`**Roll Number:** ${student.rollNumber}`);
   if (student.email) identifiers.push(`**Email:** ${student.email}`);
 
-  const userPrompt = `Write a witty intelligence dossier about this IIT Jodhpur student. Use ONLY the sources and peer feedback below — no invented facts.
+  let userPrompt = `Write a witty intelligence dossier about this IIT Jodhpur student. Use ONLY the sources and peer feedback below — no invented facts.
 
 ${identifiers.join("\n")}
 
 **Intel gathered (web search results):**
-${tavilyContext || "No web results available."}
+${tavilyContext || "No web results available."}`;
 
-**Street gossip (peer feedback):**
-${feedbackContext || "Nobody's talking. Yet."}`;
+  if (verifiedLinksContext) {
+    userPrompt += `\n\n**VERIFIED social profiles (self-reported by the student):**\n${verifiedLinksContext}`;
+  }
+
+  userPrompt += `\n\n**Street gossip (peer feedback):**\n${feedbackContext || "Nobody's talking. Yet."}`;
 
   const response = await openai.chat.completions.create({
     model: "gpt-5.2",
@@ -258,10 +269,141 @@ function consumeSearch(ip: string): boolean {
   return true;
 }
 
+const VALID_PLATFORMS = ["linkedin", "github", "leetcode", "behance", "twitter", "portfolio", "other"];
+
+function isAuthenticated(req: Request, res: Response, next: NextFunction) {
+  if (req.isAuthenticated && req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ error: "Not authenticated" });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  const PgSession = connectPgSimple(session);
+
+  app.use(session({
+    store: new PgSession({
+      conString: process.env.DATABASE_URL,
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET!,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    },
+  }));
+
+  const googleClientId = process.env.GOOGLE_CLIENT_ID;
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const hasGoogleAuth = !!(googleClientId && googleClientSecret);
+
+  if (hasGoogleAuth) {
+    const callbackURL = process.env.NODE_ENV === "production"
+      ? `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}/auth/google/callback`
+      : `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}/auth/google/callback`;
+
+    passport.use(new GoogleStrategy({
+      clientID: googleClientId!,
+      clientSecret: googleClientSecret!,
+      callbackURL,
+    }, async (_accessToken, _refreshToken, profile, done) => {
+      try {
+        const email = profile.emails?.[0]?.value;
+        if (!email || !email.endsWith("@iitj.ac.in")) {
+          return done(null, false, { message: "Only @iitj.ac.in email addresses are allowed." });
+        }
+
+        let user = await storage.findUserByGoogleId(profile.id);
+        if (!user) {
+          const student = await storage.getStudentByEmail(email);
+          user = await storage.createUser({
+            googleId: profile.id,
+            email,
+            name: profile.displayName || email.split("@")[0],
+            pictureUrl: profile.photos?.[0]?.value,
+            studentId: student?.id,
+          });
+        }
+
+        return done(null, user);
+      } catch (error) {
+        return done(error as Error);
+      }
+    }));
+
+    passport.serializeUser((user: any, done) => {
+      done(null, user.id);
+    });
+
+    passport.deserializeUser(async (id: number, done) => {
+      try {
+        const [user] = await (await import("./db")).db
+          .select().from((await import("@shared/schema")).users)
+          .where((await import("drizzle-orm")).eq((await import("@shared/schema")).users.id, id));
+        done(null, user || null);
+      } catch (error) {
+        done(error);
+      }
+    });
+
+    app.use(passport.initialize());
+    app.use(passport.session());
+
+    app.get("/auth/google", passport.authenticate("google", {
+      scope: ["profile", "email"],
+      hd: "iitj.ac.in",
+    }));
+
+    app.get("/auth/google/callback",
+      passport.authenticate("google", { failureRedirect: "/?auth=failed" }),
+      (_req, res) => {
+        res.redirect("/?auth=success");
+      }
+    );
+
+    app.post("/auth/logout", (req, res) => {
+      req.logout(() => {
+        res.json({ success: true });
+      });
+    });
+  } else {
+    app.use(passport.initialize());
+
+    app.get("/auth/google", (_req, res) => {
+      res.status(503).json({ error: "Google OAuth not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET." });
+    });
+
+    app.post("/auth/logout", (_req, res) => {
+      res.json({ success: true });
+    });
+  }
+
+  app.get("/api/me", (req, res) => {
+    if (req.isAuthenticated && req.isAuthenticated()) {
+      const user = req.user as any;
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        pictureUrl: user.pictureUrl,
+        studentId: user.studentId,
+        authenticated: true,
+      });
+    } else {
+      res.json({ authenticated: false });
+    }
+  });
+
+  app.get("/api/auth/status", (_req, res) => {
+    res.json({ googleAuthEnabled: hasGoogleAuth });
+  });
 
   app.get("/api/search-limit", (req, res) => {
     const ip = getClientIP(req);
@@ -289,7 +431,15 @@ export async function registerRoutes(
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const student = await storage.getStudent(id);
       if (!student) return res.status(404).json({ error: "Student not found" });
-      res.json(student);
+
+      const links = await storage.getSocialLinks(id);
+      const claimedBy = await storage.getUserByStudentId(id);
+
+      res.json({
+        ...student,
+        socialLinks: links,
+        claimed: !!claimedBy,
+      });
     } catch (error) {
       console.error("Get student error:", error);
       res.status(500).json({ error: "Failed to get student" });
@@ -338,10 +488,16 @@ export async function registerRoutes(
           ).join("\n")
         : "";
 
+      const socialLinksData = await storage.getSocialLinks(id);
+      const verifiedLinksContext = socialLinksData.length > 0
+        ? socialLinksData.map(l => `${l.platform}: ${l.url} (VERIFIED — self-reported)`).join("\n")
+        : "";
+
       const analysis = await generateAIAnalysis(
         { name: student.name, email: student.email, rollNumber: student.rollNumber },
         tavilyContext,
-        feedbackContext
+        feedbackContext,
+        verifiedLinksContext
       );
 
       await storage.saveCachedResponse(id, analysis, student.feedbackCount);
@@ -396,6 +552,63 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Add feedback error:", error);
       res.status(500).json({ error: "Failed to add feedback" });
+    }
+  });
+
+  app.get("/api/students/:id/social-links", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const links = await storage.getSocialLinks(id);
+      res.json(links);
+    } catch (error) {
+      console.error("Get social links error:", error);
+      res.status(500).json({ error: "Failed to get social links" });
+    }
+  });
+
+  app.put("/api/students/:id/social-links", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+
+      const user = req.user as any;
+      if (user.studentId !== id) {
+        return res.status(403).json({ error: "You can only edit your own profile links." });
+      }
+
+      const { links } = req.body;
+      if (!Array.isArray(links)) {
+        return res.status(400).json({ error: "links must be an array" });
+      }
+
+      if (links.length > 10) {
+        return res.status(400).json({ error: "Maximum 10 links allowed" });
+      }
+
+      for (const link of links) {
+        if (!link.platform || !link.url) {
+          return res.status(400).json({ error: "Each link must have platform and url" });
+        }
+        if (!VALID_PLATFORMS.includes(link.platform)) {
+          return res.status(400).json({ error: `Invalid platform: ${link.platform}. Valid: ${VALID_PLATFORMS.join(", ")}` });
+        }
+        try {
+          const parsed = new URL(link.url);
+          if (!["http:", "https:"].includes(parsed.protocol)) {
+            return res.status(400).json({ error: `Only http/https URLs allowed: ${link.url}` });
+          }
+        } catch {
+          return res.status(400).json({ error: `Invalid URL: ${link.url}` });
+        }
+      }
+
+      const saved = await storage.setSocialLinks(id, links);
+      await storage.invalidateCache(id);
+      res.json(saved);
+    } catch (error) {
+      console.error("Set social links error:", error);
+      res.status(500).json({ error: "Failed to save social links" });
     }
   });
 

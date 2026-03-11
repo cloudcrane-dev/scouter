@@ -1,15 +1,17 @@
 import {
-  students, feedback, cachedResponses,
+  students, feedback, cachedResponses, users, socialLinks,
   type Student, type InsertStudent,
   type Feedback, type InsertFeedback,
   type CachedResponse,
+  type User, type SocialLink, type InsertSocialLink,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, ilike, or, desc, sql } from "drizzle-orm";
+import { eq, ilike, or, desc, sql, and } from "drizzle-orm";
 
 export interface IStorage {
   searchStudents(query: string): Promise<Student[]>;
   getStudent(id: number): Promise<Student | undefined>;
+  getStudentByEmail(email: string): Promise<Student | undefined>;
   incrementSearchCount(id: number): Promise<void>;
   getAllStudents(): Promise<Student[]>;
   createStudent(student: InsertStudent): Promise<Student>;
@@ -22,6 +24,15 @@ export interface IStorage {
 
   getLeaderboard(sortBy: "searches" | "feedback", limit?: number): Promise<Student[]>;
   getStudentCount(): Promise<number>;
+
+  findUserByGoogleId(googleId: string): Promise<User | undefined>;
+  findUserByEmail(email: string): Promise<User | undefined>;
+  createUser(data: { googleId: string; email: string; name: string; pictureUrl?: string; studentId?: number }): Promise<User>;
+  getUserByStudentId(studentId: number): Promise<User | undefined>;
+
+  getSocialLinks(studentId: number): Promise<SocialLink[]>;
+  setSocialLinks(studentId: number, links: { platform: string; url: string }[]): Promise<SocialLink[]>;
+  invalidateCache(studentId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -39,6 +50,11 @@ export class DatabaseStorage implements IStorage {
 
   async getStudent(id: number): Promise<Student | undefined> {
     const [student] = await db.select().from(students).where(eq(students.id, id));
+    return student || undefined;
+  }
+
+  async getStudentByEmail(email: string): Promise<Student | undefined> {
+    const [student] = await db.select().from(students).where(eq(students.email, email.toLowerCase()));
     return student || undefined;
   }
 
@@ -98,6 +114,47 @@ export class DatabaseStorage implements IStorage {
   async getStudentCount(): Promise<number> {
     const result = await db.select({ count: sql<number>`count(*)` }).from(students);
     return Number(result[0]?.count ?? 0);
+  }
+
+  async findUserByGoogleId(googleId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
+    return user || undefined;
+  }
+
+  async findUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase()));
+    return user || undefined;
+  }
+
+  async createUser(data: { googleId: string; email: string; name: string; pictureUrl?: string; studentId?: number }): Promise<User> {
+    const [created] = await db.insert(users).values({
+      googleId: data.googleId,
+      email: data.email.toLowerCase(),
+      name: data.name,
+      pictureUrl: data.pictureUrl || null,
+      studentId: data.studentId || null,
+    }).returning();
+    return created;
+  }
+
+  async getUserByStudentId(studentId: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.studentId, studentId));
+    return user || undefined;
+  }
+
+  async getSocialLinks(studentId: number): Promise<SocialLink[]> {
+    return db.select().from(socialLinks).where(eq(socialLinks.studentId, studentId));
+  }
+
+  async setSocialLinks(studentId: number, links: { platform: string; url: string }[]): Promise<SocialLink[]> {
+    await db.delete(socialLinks).where(eq(socialLinks.studentId, studentId));
+    if (links.length === 0) return [];
+    const values = links.map(l => ({ studentId, platform: l.platform, url: l.url }));
+    return db.insert(socialLinks).values(values).returning();
+  }
+
+  async invalidateCache(studentId: number): Promise<void> {
+    await db.delete(cachedResponses).where(eq(cachedResponses.studentId, studentId));
   }
 }
 

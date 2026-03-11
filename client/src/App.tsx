@@ -3,17 +3,21 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home";
 import StudentPage from "@/pages/student";
 import LeaderboardPage from "@/pages/leaderboard";
+import ProfilePage from "@/pages/profile";
 
-import { Search, Trophy } from "lucide-react";
+import { Search, Trophy, User } from "lucide-react";
 
 function BottomNav() {
   const [location, navigate] = useLocation();
+  const { isAuthenticated } = useAuth();
   const isHome = location === "/";
   const isLeaderboard = location === "/leaderboard";
+  const isProfile = location === "/profile";
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-background/90 backdrop-blur-sm border-t border-white/5 z-50 safe-area-pb font-mono" data-testid="nav-bottom">
@@ -40,6 +44,19 @@ function BottomNav() {
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-foreground nav-indicator" />
           )}
         </button>
+        {isAuthenticated && (
+          <button
+            data-testid="nav-profile"
+            onClick={() => navigate("/profile")}
+            className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] uppercase tracking-[0.15em] transition-all duration-200 relative cursor-pointer"
+          >
+            <User className={`w-4 h-4 transition-colors duration-200 ${isProfile ? "text-foreground" : "text-muted-foreground/50"}`} />
+            <span className={`transition-colors duration-200 ${isProfile ? "text-foreground" : "text-muted-foreground/50"}`}>profile</span>
+            {isProfile && (
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-foreground nav-indicator" />
+            )}
+          </button>
+        )}
       </div>
     </nav>
   );
@@ -51,6 +68,7 @@ function Router() {
       <Route path="/" component={HomePage} />
       <Route path="/student/:id" component={StudentPage} />
       <Route path="/leaderboard" component={LeaderboardPage} />
+      <Route path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -59,14 +77,16 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <div className="scanline" />
-        <div className="pb-16">
-          <Router />
-        </div>
-        <BottomNav />
-      </TooltipProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <div className="scanline" />
+          <div className="pb-16">
+            <Router />
+          </div>
+          <BottomNav />
+        </TooltipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
