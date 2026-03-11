@@ -85,7 +85,7 @@ function TerminalLoader() {
         <span className="cursor-blink">_</span>
       </div>
       <div className="mt-1 text-[10px] text-muted-foreground/50">
-        tavily search + gpt analysis in progress
+        web search + social profiles + gpt analysis in progress
       </div>
     </div>
   );

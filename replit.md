@@ -91,8 +91,16 @@ A mobile-friendly web application for scouting and analyzing IIT Jodhpur student
 - Serper: 7 results per query (Google search via serper.dev)
 - Additional Serper queries for roll number and email when available
 - Results deduplicated by URL across all sources
-- Verified social links passed to AI as trusted sources
 - Content moderation via GPT on all peer feedback submissions (blocks abuse, vulgar remarks, harassment)
+
+## Social Profile Live Fetching
+When a student has verified social links, their content is fetched live during analysis:
+- **GitHub**: GitHub REST API — profile bio, public repo count, followers, top 6 repos with names/descriptions/languages/stars
+- **LeetCode**: LeetCode public GraphQL API — total problems solved, difficulty breakdown (Easy/Medium/Hard), global ranking, badges
+- **LinkedIn / Behance / Portfolio / Other**: Tavily extract endpoint — fetches raw page content (up to 3000 chars)
+- All fetches run in parallel alongside web search
+- Fetched content is passed to GPT as high-trust verified data with platform-specific instructions
+- AI is instructed to cite specific details (repo names, problem counts, rankings) naturally in the dossier
 
 ## Environment Variables
 - `DATABASE_URL` - PostgreSQL connection string (auto-provisioned)

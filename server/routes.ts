@@ -94,6 +94,152 @@ async function searchSerper(query: string): Promise<string> {
   }
 }
 
+async function extractUrlContent(url: string): Promise<string> {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) return "";
+  try {
+    const response = await fetch("https://api.tavily.com/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: apiKey, urls: [url] }),
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!response.ok) return "";
+    const data = await response.json();
+    const result = data.results?.[0];
+    if (!result?.raw_content) return "";
+    return result.raw_content.slice(0, 3000);
+  } catch {
+    return "";
+  }
+}
+
+async function fetchGitHubProfile(username: string): Promise<string> {
+  try {
+    const [profileRes, reposRes] = await Promise.all([
+      fetch(`https://api.github.com/users/${encodeURIComponent(username)}`, {
+        headers: { Accept: "application/vnd.github+json" },
+        signal: AbortSignal.timeout(8000),
+      }),
+      fetch(`https://api.github.com/users/${encodeURIComponent(username)}/repos?sort=updated&per_page=6&type=owner`, {
+        headers: { Accept: "application/vnd.github+json" },
+        signal: AbortSignal.timeout(8000),
+      }),
+    ]);
+    if (!profileRes.ok) return "";
+    const profile = await profileRes.json();
+    let out = `GitHub username: ${profile.login}\n`;
+    if (profile.name) out += `Name: ${profile.name}\n`;
+    if (profile.bio) out += `Bio: ${profile.bio}\n`;
+    if (profile.company) out += `Company/Org: ${profile.company}\n`;
+    if (profile.blog) out += `Website: ${profile.blog}\n`;
+    out += `Public repos: ${profile.public_repos}, Followers: ${profile.followers}, Following: ${profile.following}\n`;
+
+    if (reposRes.ok) {
+      const repos = await reposRes.json();
+      if (Array.isArray(repos) && repos.length > 0) {
+        out += `Top repos:\n`;
+        for (const r of repos.slice(0, 6)) {
+          out += `  - ${r.name}${r.description ? ": " + r.description : ""} [${r.language || "unknown lang"}, ★${r.stargazers_count}]\n`;
+        }
+      }
+    }
+    return out.trim();
+  } catch {
+    return "";
+  }
+}
+
+async function fetchLeetCodeStats(username: string): Promise<string> {
+  try {
+    const query = `{
+      matchedUser(username: "${username}") {
+        username
+        profile { realName aboutMe school ranking }
+        submitStatsGlobal {
+          acSubmissionNum { difficulty count submissions }
+        }
+        badges { name }
+      }
+    }`;
+    const response = await fetch("https://leetcode.com/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Referer": "https://leetcode.com" },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return "";
+    const data = await response.json();
+    const user = data.data?.matchedUser;
+    if (!user) return "";
+    let out = `LeetCode username: ${user.username}\n`;
+    const p = user.profile;
+    if (p?.realName) out += `Name: ${p.realName}\n`;
+    if (p?.school) out += `School: ${p.school}\n`;
+    if (p?.ranking) out += `Global ranking: #${p.ranking}\n`;
+    const stats = user.submitStatsGlobal?.acSubmissionNum;
+    if (stats) {
+      for (const s of stats) {
+        if (s.difficulty !== "All") out += `${s.difficulty} solved: ${s.count} (${s.submissions} submissions)\n`;
+      }
+      const total = stats.find((s: any) => s.difficulty === "All");
+      if (total) out += `Total solved: ${total.count}\n`;
+    }
+    const badges = user.badges?.slice(0, 5).map((b: any) => b.name).join(", ");
+    if (badges) out += `Badges: ${badges}\n`;
+    return out.trim();
+  } catch {
+    return "";
+  }
+}
+
+function parseUsernameFromUrl(url: string, platform: string): string | null {
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/").filter(Boolean);
+    if (platform === "github" || platform === "leetcode") return parts[0] || null;
+    if (platform === "linkedin") return parts[1] || null; // /in/username
+    if (platform === "behance") return parts[0] || null;
+    if (platform === "twitter") return parts[0]?.replace("@", "") || null;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchSocialLinkContent(platform: string, url: string): Promise<string> {
+  const username = parseUsernameFromUrl(url, platform);
+
+  if (platform === "github" && username) {
+    const content = await fetchGitHubProfile(username);
+    if (content) return `[GitHub profile for @${username}]\n${content}`;
+  }
+
+  if (platform === "leetcode" && username) {
+    const content = await fetchLeetCodeStats(username);
+    if (content) return `[LeetCode profile for ${username}]\n${content}`;
+  }
+
+  const extracted = await extractUrlContent(url);
+  if (extracted) {
+    const label = platform.charAt(0).toUpperCase() + platform.slice(1);
+    return `[${label} profile at ${url}]\n${extracted}`;
+  }
+
+  return `[${platform} profile: ${url} — content not fetchable]`;
+}
+
+async function gatherSocialLinksContent(links: { platform: string; url: string }[]): Promise<string> {
+  if (!links.length) return "";
+  const results = await Promise.allSettled(
+    links.map(l => fetchSocialLinkContent(l.platform, l.url))
+  );
+  return results
+    .filter(r => r.status === "fulfilled" && r.value)
+    .map(r => (r as PromiseFulfilledResult<string>).value)
+    .join("\n\n");
+}
+
 async function gatherWebContext(name: string, email?: string | null, rollNumber?: string | null): Promise<string> {
   const searchQuery = `${name} IIT Jodhpur`;
   const queries: Promise<string>[] = [
@@ -139,10 +285,12 @@ async function gatherWebContext(name: string, email?: string | null, rollNumber?
 
 async function generateAIAnalysis(
   student: { name: string; email?: string | null; rollNumber?: string | null },
-  tavilyContext: string,
+  webContext: string,
   feedbackContext: string,
-  verifiedLinksContext: string
+  socialLinksContent: string
 ): Promise<string> {
+  const hasSocialContent = !!socialLinksContent.trim();
+
   const systemPrompt = `You are a chill analyst for the IIT Jodhpur Student Intelligence System. Write a brief, mildly witty dossier about a student.
 
 BASELINE FACTS (always true — every student in this system is from IIT Jodhpur):
@@ -150,39 +298,46 @@ BASELINE FACTS (always true — every student in this system is from IIT Jodhpur
 - Decode the roll number format: e.g. B24CS = B.Tech 2024 CS, M25LDS = M.Des 2025, B23ME = B.Tech 2023 Mechanical, M24EE = M.Tech 2024 EE, PHD = PhD student. Use this to state their program and batch year as fact.
 - Common roll prefixes: B=B.Tech, M=M.Tech/M.Des/MSc, PHD=PhD. Department codes: CS=Computer Science, EE=Electrical, ME=Mechanical, AI=AI, LDS=Design, BS=Bioscience, CE=Civil, CH=Chemical, MA=Math, PH=Physics, MT=Metallurgy, etc.
 
-SEARCH RESULT FILTERING:
-- DISCARD any result clearly about a DIFFERENT person at a different institution (MNNIT, IIT Kharagpur, Karlsruhe, Chandigarh University, etc.).
+WEB SEARCH FILTERING:
+- DISCARD any search result clearly about a DIFFERENT person at a different institution (MNNIT, IIT Kharagpur, Karlsruhe, Chandigarh University, etc.).
 - INCLUDE results that mention IIT Jodhpur, iitj.ac.in, or match the student's roll/email.
 - Results mentioning the name without a conflicting institution can be included cautiously.
 
-VERIFIED LINKS:
-- If the student has self-reported social links (marked as "VERIFIED — self-reported"), treat these as trusted. Mention them naturally (e.g., "has a LinkedIn presence" or "active on GitHub").
+${hasSocialContent ? `LIVE SOCIAL PROFILE DATA (verified, self-reported by the student — high trust):
+- This data was fetched directly from the student's linked profiles. Use it freely and specifically.
+- For GitHub: cite specific repo names, languages, star counts, bio, contributions.
+- For LeetCode: cite actual problem counts, difficulty breakdown, ranking — be specific.
+- For LinkedIn: cite job history, skills, endorsements, headline.
+- For Behance/portfolio: mention specific projects, design work, aesthetics.
+- Weave the social data naturally into the dossier — don't just list facts robotically.
+` : ""}
 
 STYLE:
-- Write 1-2 short paragraphs. Keep it under 80 words total.
-- State their program/batch from the roll number. Mention any work/clubs/projects found in search results.
-- Add ONE subtle witty remark or observation — light touch, not a full roast.
-- If peer feedback exists, weave it in as a brief quote.
-- If no useful search results were found beyond the roll number, keep it short and casual.
-- DO NOT list URLs or links.
-- DO NOT have section headers or bullet points.
+- Write 2-3 short paragraphs if social data is rich; 1-2 paragraphs if sparse. Keep it under 120 words total.
+- State their program/batch from the roll number.
+- If social profiles were fetched, lead with the most interesting specific detail (a repo, a solved count, a project).
+- Add ONE subtle witty remark — light touch, not a roast.
+- If peer feedback exists, weave it in as a brief quote or paraphrase.
+- If no useful info was found beyond the roll number, keep it short and casual.
+- DO NOT list raw URLs.
+- DO NOT use section headers or bullet points.
 - End with a short **Verdict** — one casual sentence.
 
-Keep it tight. Less is more.`;
+Keep it tight but informative when data is available.`;
 
   const identifiers = [`**Name:** ${student.name}`];
   if (student.rollNumber) identifiers.push(`**Roll Number:** ${student.rollNumber}`);
   if (student.email) identifiers.push(`**Email:** ${student.email}`);
 
-  let userPrompt = `Write a witty intelligence dossier about this IIT Jodhpur student. Use ONLY the sources and peer feedback below — no invented facts.
+  let userPrompt = `Write a witty intelligence dossier about this IIT Jodhpur student. Use ONLY the sources below — no invented facts.
 
 ${identifiers.join("\n")}
 
-**Intel gathered (web search results):**
-${tavilyContext || "No web results available."}`;
+**Web search intel:**
+${webContext || "No web results available."}`;
 
-  if (verifiedLinksContext) {
-    userPrompt += `\n\n**VERIFIED social profiles (self-reported by the student):**\n${verifiedLinksContext}`;
+  if (hasSocialContent) {
+    userPrompt += `\n\n**VERIFIED social profile data (fetched live from student's own accounts):**\n${socialLinksContent}`;
   }
 
   userPrompt += `\n\n**Street gossip (peer feedback):**\n${feedbackContext || "Nobody's talking. Yet."}`;
@@ -484,7 +639,16 @@ export async function registerRoutes(
         return res.json({ analysis: cachedResponse.response, cached: true });
       }
 
-      const tavilyContext = await gatherWebContext(student.name, student.email, student.rollNumber);
+      const socialLinksData = await storage.getSocialLinks(id);
+
+      const [webContext, socialLinksContent] = await Promise.all([
+        gatherWebContext(student.name, student.email, student.rollNumber),
+        gatherSocialLinksContent(socialLinksData),
+      ]);
+
+      if (socialLinksContent) {
+        console.log(`[Social] Fetched content for ${socialLinksData.length} link(s):\n${socialLinksContent.substring(0, 1000)}`);
+      }
 
       const feedbackContext = currentFeedback.length > 0
         ? currentFeedback.map((f, i) =>
@@ -492,16 +656,11 @@ export async function registerRoutes(
           ).join("\n")
         : "";
 
-      const socialLinksData = await storage.getSocialLinks(id);
-      const verifiedLinksContext = socialLinksData.length > 0
-        ? socialLinksData.map(l => `${l.platform}: ${l.url} (VERIFIED — self-reported)`).join("\n")
-        : "";
-
       const analysis = await generateAIAnalysis(
         { name: student.name, email: student.email, rollNumber: student.rollNumber },
-        tavilyContext,
+        webContext,
         feedbackContext,
-        verifiedLinksContext
+        socialLinksContent
       );
 
       await storage.saveCachedResponse(id, analysis, student.feedbackCount);
