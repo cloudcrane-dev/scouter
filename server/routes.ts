@@ -10,69 +10,116 @@ const openai = new OpenAI({
 
 async function searchTavily(query: string, includeDomains?: string[]): Promise<string> {
   const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey) throw new Error("TAVILY_API_KEY not set");
+  if (!apiKey) return "";
 
-  const body: any = {
-    api_key: apiKey,
-    query,
-    max_results: 7,
-    search_depth: "advanced",
-    include_answer: true,
-  };
-  if (includeDomains?.length) {
-    body.include_domains = includeDomains;
-  }
-
-  const response = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    console.error("Tavily API error:", text);
-    return "No web results found.";
-  }
-
-  const data = await response.json();
-  let context = "";
-  if (data.answer) {
-    context += `Summary: ${data.answer}\n\n`;
-  }
-  if (data.results) {
-    for (const result of data.results) {
-      context += `Source: ${result.title} (${result.url})\n${result.content}\n\n`;
+  try {
+    const body: any = {
+      api_key: apiKey,
+      query,
+      max_results: 7,
+      search_depth: "advanced",
+      include_answer: true,
+    };
+    if (includeDomains?.length) {
+      body.include_domains = includeDomains;
     }
+
+    const response = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Tavily API error:", text);
+      return "";
+    }
+
+    const data = await response.json();
+    let context = "";
+    if (data.answer) {
+      context += `Summary: ${data.answer}\n\n`;
+    }
+    if (data.results) {
+      for (const result of data.results) {
+        context += `Source: ${result.title} (${result.url})\n${result.content}\n\n`;
+      }
+    }
+    return context;
+  } catch (error) {
+    console.error("Tavily search error:", error);
+    return "";
   }
-  return context || "No web results found.";
+}
+
+async function searchGoogle(query: string): Promise<string> {
+  const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
+  const cx = process.env.GOOGLE_SEARCH_CX;
+  if (!apiKey || !cx) return "";
+
+  try {
+    const params = new URLSearchParams({
+      key: apiKey,
+      cx,
+      q: query,
+      num: "7",
+    });
+
+    const response = await fetch(`https://www.googleapis.com/customsearch/v1?${params}`);
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Google Search API error:", text);
+      return "";
+    }
+
+    const data = await response.json();
+    let context = "";
+    if (data.items) {
+      for (const item of data.items) {
+        const snippet = item.snippet || "";
+        context += `Source: ${item.title} (${item.link})\n${snippet}\n\n`;
+      }
+    }
+    return context;
+  } catch (error) {
+    console.error("Google Search error:", error);
+    return "";
+  }
 }
 
 async function gatherWebContext(name: string, email?: string | null, rollNumber?: string | null): Promise<string> {
   const queries: Promise<string>[] = [];
 
   queries.push(searchTavily(`"${name}" IIT Jodhpur student profile achievements projects`));
-
   queries.push(searchTavily(`"${name}" site:linkedin.com OR site:github.com OR site:codeforces.com OR site:leetcode.com`));
+
+  queries.push(searchGoogle(`"${name}" IIT Jodhpur`));
+  queries.push(searchGoogle(`"${name}" linkedin OR github OR portfolio`));
 
   if (rollNumber) {
     queries.push(searchTavily(`"${rollNumber}" IIT Jodhpur`));
+    queries.push(searchGoogle(`"${rollNumber}" IIT Jodhpur`));
   }
 
   if (email && !email.endsWith("@iitj.ac.in")) {
     queries.push(searchTavily(`"${email}"`));
   }
 
-  const results = await Promise.all(queries);
-  const seen = new Set<string>();
+  const settled = await Promise.allSettled(queries);
+  const seenUrls = new Set<string>();
   let combined = "";
-  for (const r of results) {
-    for (const line of r.split("\n\n")) {
+  for (const result of settled) {
+    if (result.status !== "fulfilled" || !result.value) continue;
+    for (const line of result.value.split("\n\n")) {
       const trimmed = line.trim();
-      if (trimmed && !seen.has(trimmed)) {
-        seen.add(trimmed);
-        combined += trimmed + "\n\n";
-      }
+      if (!trimmed) continue;
+      const urlMatch = trimmed.match(/^Source:.*\(([^)]+)\)/);
+      const url = urlMatch?.[1];
+      if (url && seenUrls.has(url)) continue;
+      if (url) seenUrls.add(url);
+      combined += trimmed + "\n\n";
     }
   }
   return combined || "No web results found.";

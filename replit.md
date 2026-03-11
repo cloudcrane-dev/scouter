@@ -8,11 +8,11 @@ A mobile-friendly web application for scouting and analyzing IIT Jodhpur student
 - **Backend**: Express.js
 - **Database**: PostgreSQL with Drizzle ORM
 - **AI**: OpenAI GPT-5.2 via Replit AI Integrations (no API key needed)
-- **Search**: Tavily API for web search context
+- **Search**: Tavily API + Google Custom Search API (dual-source, parallel)
 
 ## Key Features
 1. **Student Search** - Autocomplete search by name, email, or roll number with debounced dropdown
-2. **AI Analysis** - Tavily web search + peer feedback fed to GPT for comprehensive student profiles
+2. **AI Analysis** - Tavily + Google dual web search + peer feedback fed to GPT for verified-facts-only student dossiers
 3. **Response Caching** - AI responses cached in DB, regenerated only when new feedback is added
 4. **Anonymous Peer Insights** - Users can add insights/feedback per student (no author name)
 5. **Leaderboard** - Global ranking by search count or feedback count (filters out zeros)
@@ -60,9 +60,20 @@ A mobile-friendly web application for scouting and analyzing IIT Jodhpur student
 - 200 searches/day per IP address (in-memory tracker, resets at midnight)
 - Search input sanitizes SQL wildcards (`%`, `_`) before ILIKE queries
 
+## Web Search Pipeline
+- Runs Tavily and Google searches in parallel for each analysis
+- Tavily: advanced depth, 7 results per query (profile search + platform-specific search)
+- Google: 7 results per query (general + LinkedIn/GitHub/portfolio)
+- Roll number and email also searched when available
+- Results deduplicated by URL across all sources
+- Google search is optional — if credentials aren't set, only Tavily is used
+- Content moderation via GPT on all peer feedback submissions (blocks abuse, vulgar remarks, harassment)
+
 ## Environment Variables
 - `DATABASE_URL` - PostgreSQL connection string (auto-provisioned)
 - `TAVILY_API_KEY` - Tavily API key for web search
+- `GOOGLE_SEARCH_API_KEY` - Google Custom Search API key (optional, enhances results)
+- `GOOGLE_SEARCH_CX` - Google Programmable Search Engine ID (optional)
 - `AI_INTEGRATIONS_OPENAI_API_KEY` - Auto-set by Replit AI Integrations
 - `AI_INTEGRATIONS_OPENAI_BASE_URL` - Auto-set by Replit AI Integrations
 - `SESSION_SECRET` - Session secret
