@@ -155,12 +155,21 @@ export default function StudentPage() {
   });
 
   const viewedRef = useRef(false);
+  const analysisStartedRef = useRef(false);
+
   useEffect(() => {
     if (id > 0 && !viewedRef.current) {
       viewedRef.current = true;
       apiRequest("POST", `/api/students/${id}/view`).catch(() => {});
     }
   }, [id]);
+
+  useEffect(() => {
+    if (id > 0 && student && !analysisStartedRef.current) {
+      analysisStartedRef.current = true;
+      analyzeMutation.mutate(false);
+    }
+  }, [id, student]);
 
   const { data: analysisData } = useQuery<{ analysis: string; cached: boolean; ratings: Record<string, number> | null }>({
     queryKey: ["/api/students", id.toString(), "analyze"],
@@ -380,20 +389,7 @@ export default function StudentPage() {
           </div>
 
           <AnimatePresence mode="wait">
-            {!analysisData && !analyzeMutation.isPending ? (
-              <motion.button
-                key="generate"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => analyzeMutation.mutate()}
-                data-testid="button-generate-analysis"
-                className="w-full py-3 border border-white/10 hover:border-white/25 flex items-center justify-center gap-2 text-xs font-mono text-muted-foreground hover:text-foreground transition-all duration-200 active:scale-[0.99] cursor-pointer tracking-wider uppercase"
-              >
-                <Terminal className="w-3.5 h-3.5" />
-                $ run analysis
-              </motion.button>
-            ) : analyzeMutation.isPending ? (
+            {analyzeMutation.isPending ? (
               <motion.div
                 key="loading"
                 initial={{ opacity: 0 }}
