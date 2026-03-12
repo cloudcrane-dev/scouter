@@ -20,7 +20,7 @@ export interface IStorage {
   addFeedback(feedback: InsertFeedback): Promise<Feedback>;
 
   getCachedResponse(studentId: number): Promise<CachedResponse | undefined>;
-  saveCachedResponse(studentId: number, response: string, feedbackCount: number): Promise<CachedResponse>;
+  saveCachedResponse(studentId: number, response: string, feedbackCount: number, ratings?: string): Promise<CachedResponse>;
 
   getLeaderboard(sortBy: "searches" | "feedback", limit?: number): Promise<Student[]>;
   getStudentCount(): Promise<number>;
@@ -97,10 +97,11 @@ export class DatabaseStorage implements IStorage {
     return cached || undefined;
   }
 
-  async saveCachedResponse(studentId: number, response: string, feedbackCount: number): Promise<CachedResponse> {
+  async saveCachedResponse(studentId: number, response: string, feedbackCount: number, ratings?: string): Promise<CachedResponse> {
     const [created] = await db.insert(cachedResponses).values({
       studentId,
       response,
+      ratings: ratings ?? null,
       feedbackCountAtGeneration: feedbackCount,
     }).returning();
     return created;

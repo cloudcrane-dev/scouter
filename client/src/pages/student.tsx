@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Eye, MessageSquare, Mail, Sparkles,
-  Send, RefreshCw, User, Terminal, ShieldCheck, ExternalLink,
+  Send, RefreshCw, User, Terminal, ShieldCheck, ExternalLink, Star,
 } from "lucide-react";
 import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -91,6 +91,41 @@ function TerminalLoader() {
   );
 }
 
+const RATING_PARAMS = [
+  { key: "onlinePresence",      label: "Online Presence" },
+  { key: "codingActivity",      label: "Coding Activity" },
+  { key: "realWorldExperience", label: "Real-World Experience" },
+  { key: "profileCompleteness", label: "Profile Completeness" },
+];
+
+function StarRow({ score }: { score: number }) {
+  const clamped = Math.max(1, Math.min(5, Math.round(score)));
+  return (
+    <div className="flex gap-0.5">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Star
+          key={i}
+          className={`w-3 h-3 ${i < clamped ? "fill-foreground text-foreground" : "fill-none text-muted-foreground/30"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RatingsDisplay({ ratings }: { ratings: Record<string, number> }) {
+  return (
+    <div className="mt-4 pt-4 border-t border-white/8 space-y-2">
+      <p className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest mb-3">// intel scores</p>
+      {RATING_PARAMS.map(({ key, label }) => (
+        <div key={key} className="flex items-center justify-between gap-2" data-testid={`rating-${key}`}>
+          <span className="text-[10px] font-mono text-muted-foreground/70 truncate">{label}</span>
+          <StarRow score={ratings[key] ?? 1} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const PLATFORM_ICONS: Record<string, { icon: any; label: string }> = {
   github: { icon: SiGithub, label: "GitHub" },
   linkedin: { icon: SiLinkedin, label: "LinkedIn" },
@@ -127,7 +162,7 @@ export default function StudentPage() {
     }
   }, [id]);
 
-  const { data: analysisData } = useQuery<{ analysis: string; cached: boolean }>({
+  const { data: analysisData } = useQuery<{ analysis: string; cached: boolean; ratings: Record<string, number> | null }>({
     queryKey: ["/api/students", id.toString(), "analyze"],
     enabled: false,
   });
@@ -380,6 +415,9 @@ export default function StudentPage() {
                   </span>
                 )}
                 <MarkdownRenderer content={analysisData.analysis} />
+                {analysisData.ratings && (
+                  <RatingsDisplay ratings={analysisData.ratings} />
+                )}
               </motion.div>
             ) : null}
           </AnimatePresence>

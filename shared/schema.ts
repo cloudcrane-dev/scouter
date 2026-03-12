@@ -46,6 +46,7 @@ export const cachedResponses = pgTable("cached_responses", {
   id: serial("id").primaryKey(),
   studentId: integer("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
   response: text("response").notNull(),
+  ratings: text("ratings"),
   feedbackCountAtGeneration: integer("feedback_count_at_generation").default(0).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

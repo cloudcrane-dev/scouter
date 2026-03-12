@@ -288,7 +288,7 @@ async function generateAIAnalysis(
   webContext: string,
   feedbackContext: string,
   socialLinksContent: string
-): Promise<string> {
+): Promise<{ text: string; ratingsJson: string }> {
   const hasSocialContent = !!socialLinksContent.trim();
 
   const systemPrompt = `Tu ek desi stand-up comedian + intelligence analyst hai — Samay Raina ki tarah. IIT Jodhpur Student Intelligence System ke liye ek student ka roast-style dossier likhna hai. Hinglish mein — thoda Hindi, thoda English, full desi energy.
@@ -322,7 +322,23 @@ STYLE — dry wit, understated Hinglish:
 - No headers, no bullet points.
 - End mein ek chill **Verdict** — ek sentence, understated punchline.
 
-Less is more. Smart over loud.`;
+Less is more. Smart over loud.
+
+OUTPUT FORMAT — STRICT:
+After the dossier text, output a [RATINGS] JSON block with exactly these 4 integer scores (1-5):
+- onlinePresence: how visible/findable across web + social platforms (5 = strong multi-platform presence, 1 = basically a ghost)
+- codingActivity: GitHub repos, LeetCode stats, coding projects (5 = very active coder, 1 = no coding evidence)
+- realWorldExperience: internships, research, clubs, competitions, achievements (5 = impressive track record, 1 = none found)
+- profileCompleteness: claimed profile, photo, social links added, web presence (5 = fully complete, 1 = unclaimed bare profile)
+
+Be honest and evidence-based. If data is missing, score low — don't be generous without reason.
+
+Example output format:
+<dossier text here>
+
+[RATINGS]
+{"onlinePresence":3,"codingActivity":4,"realWorldExperience":2,"profileCompleteness":5}
+[/RATINGS]`;
 
   const identifiers = [`**Name:** ${student.name}`];
   if (student.rollNumber) identifiers.push(`**Roll Number:** ${student.rollNumber}`);
@@ -350,7 +366,13 @@ ${webContext || "Web pe kuch nahi mila. Ghost mode on hai."}`;
     max_completion_tokens: 8192,
   });
 
-  return response.choices[0]?.message?.content || "Unable to generate analysis.";
+  const raw = response.choices[0]?.message?.content || "";
+
+  const ratingsMatch = raw.match(/\[RATINGS\]\s*([\s\S]*?)\s*\[\/RATINGS\]/);
+  const ratingsJson = ratingsMatch ? ratingsMatch[1].trim() : JSON.stringify({ onlinePresence: 1, codingActivity: 1, realWorldExperience: 1, profileCompleteness: 1 });
+  const text = raw.replace(/\[RATINGS\][\s\S]*?\[\/RATINGS\]/g, "").trim() || "Unable to generate analysis.";
+
+  return { text, ratingsJson };
 }
 
 async function moderateContent(text: string): Promise<{ allowed: boolean; reason: string }> {
@@ -636,7 +658,9 @@ export async function registerRoutes(
       const cachedResponse = force ? null : await storage.getCachedResponse(id);
 
       if (cachedResponse && cachedResponse.feedbackCountAtGeneration === student.feedbackCount) {
-        return res.json({ analysis: cachedResponse.response, cached: true });
+        let ratings: Record<string, number> | null = null;
+        try { if (cachedResponse.ratings) ratings = JSON.parse(cachedResponse.ratings); } catch { ratings = null; }
+        return res.json({ analysis: cachedResponse.response, ratings, cached: true });
       }
 
       const socialLinksData = await storage.getSocialLinks(id);
@@ -656,16 +680,19 @@ export async function registerRoutes(
           ).join("\n")
         : "";
 
-      const analysis = await generateAIAnalysis(
+      const { text: analysis, ratingsJson } = await generateAIAnalysis(
         { name: student.name, email: student.email, rollNumber: student.rollNumber },
         webContext,
         feedbackContext,
         socialLinksContent
       );
 
-      await storage.saveCachedResponse(id, analysis, student.feedbackCount);
+      await storage.saveCachedResponse(id, analysis, student.feedbackCount, ratingsJson);
 
-      res.json({ analysis, cached: false });
+      let ratings: Record<string, number> | null = null;
+      try { ratings = JSON.parse(ratingsJson); } catch { ratings = null; }
+
+      res.json({ analysis, ratings, cached: false });
     } catch (error) {
       console.error("Analysis error:", error);
       res.status(500).json({ error: "Failed to generate analysis" });
