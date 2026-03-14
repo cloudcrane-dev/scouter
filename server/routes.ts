@@ -419,7 +419,7 @@ REJECT: <short reason> — if the content violates the rules`
 }
 
 const DAILY_SEARCH_LIMIT = 200;
-const ipSearchCounts = new Map<string, { count: number; date: string }>();
+let globalSearchCount = { count: 0, date: "" };
 
 function getClientIP(req: any): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -430,24 +430,22 @@ function getClientIP(req: any): string {
   return req.ip || req.socket?.remoteAddress || "unknown";
 }
 
-function getIPSearchInfo(ip: string) {
+function getGlobalSearchInfo() {
   const today = new Date().toDateString();
-  const entry = ipSearchCounts.get(ip);
-  if (!entry || entry.date !== today) {
+  if (globalSearchCount.date !== today) {
     return { used: 0, limit: DAILY_SEARCH_LIMIT, remaining: DAILY_SEARCH_LIMIT };
   }
-  return { used: entry.count, limit: DAILY_SEARCH_LIMIT, remaining: DAILY_SEARCH_LIMIT - entry.count };
+  return { used: globalSearchCount.count, limit: DAILY_SEARCH_LIMIT, remaining: DAILY_SEARCH_LIMIT - globalSearchCount.count };
 }
 
-function consumeSearch(ip: string): boolean {
+function consumeSearch(_ip: string): boolean {
   const today = new Date().toDateString();
-  const entry = ipSearchCounts.get(ip);
-  if (!entry || entry.date !== today) {
-    ipSearchCounts.set(ip, { count: 1, date: today });
+  if (globalSearchCount.date !== today) {
+    globalSearchCount = { count: 1, date: today };
     return true;
   }
-  if (entry.count >= DAILY_SEARCH_LIMIT) return false;
-  entry.count++;
+  if (globalSearchCount.count >= DAILY_SEARCH_LIMIT) return false;
+  globalSearchCount.count++;
   return true;
 }
 
@@ -591,9 +589,8 @@ export async function registerRoutes(
     res.json({ googleAuthEnabled: hasGoogleAuth });
   });
 
-  app.get("/api/search-limit", (req, res) => {
-    const ip = getClientIP(req);
-    res.json(getIPSearchInfo(ip));
+  app.get("/api/search-limit", (_req, res) => {
+    res.json(getGlobalSearchInfo());
   });
 
   app.get("/api/students/search", async (req, res) => {
