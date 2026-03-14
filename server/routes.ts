@@ -422,6 +422,11 @@ const DAILY_SEARCH_LIMIT = 200;
 const ipSearchCounts = new Map<string, { count: number; date: string }>();
 
 function getClientIP(req: any): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    const first = (typeof forwarded === "string" ? forwarded : forwarded[0]).split(",")[0].trim();
+    if (first) return first;
+  }
   return req.ip || req.socket?.remoteAddress || "unknown";
 }
 
