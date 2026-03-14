@@ -57,10 +57,10 @@ function BottomNav() {
           <a
             href="/auth/google"
             data-testid="nav-login"
-            className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] uppercase tracking-[0.15em] transition-all duration-200 relative group border-t-2 border-foreground/60 -mt-px"
+            className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] uppercase tracking-[0.15em] transition-all duration-200 relative group"
           >
             <ShieldCheck className="w-4 h-4 text-foreground group-hover:scale-110 transition-transform duration-200" />
-            <span className="text-foreground font-semibold">iitj login</span>
+            <span className="text-foreground font-semibold tracking-widest">iitj login</span>
           </a>
         )}
       </div>
