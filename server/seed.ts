@@ -24,7 +24,8 @@ function parseCSVLine(line: string): string[] {
 }
 
 function extractRollNumber(name: string): { cleanName: string; rollNumber: string | null } {
-  const match = name.match(/^(.+?)\s*\(([A-Z0-9]+)\)\s*$/);
+  // handles multiple roll numbers like (M24DE3001)(G23AI2004) — takes first
+  const match = name.match(/^(.+?)\s*\(([A-Z0-9]+)\)/);
   if (match) {
     return { cleanName: match[1].trim(), rollNumber: match[2] };
   }
@@ -113,17 +114,18 @@ export async function seedDatabase() {
     const existing = await db.select({ count: sql<number>`count(*)` }).from(students);
     const existingCount = Number(existing[0]?.count ?? 0);
 
-    if (existingCount >= records.length) {
-      console.log(`Database already has ${existingCount} students. Skipping CSV import.`);
-      return;
+    if (existingCount === 0) {
+      console.log("Empty database — seeding from CSV.");
+    } else {
+      const newCount = records.length - existingCount;
+      if (newCount <= 0) {
+        console.log(`Database already has ${existingCount} students. Skipping CSV import.`);
+        return;
+      }
+      console.log(`Database has ${existingCount} students; CSV has ${records.length} — importing ${newCount} new records.`);
     }
 
-    if (existingCount > 0 && existingCount < 50) {
-      await db.delete(students);
-      console.log("Cleared old seed data.");
-    }
-
-    const BATCH_SIZE = 100;
+    const BATCH_SIZE = 200;
     for (let i = 0; i < records.length; i += BATCH_SIZE) {
       const batch = records.slice(i, i + BATCH_SIZE);
       await db.insert(students).values(batch).onConflictDoNothing({ target: students.email });
