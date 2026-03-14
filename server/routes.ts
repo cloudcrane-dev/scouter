@@ -485,7 +485,8 @@ export async function registerRoutes(
   const hasGoogleAuth = !!(googleClientId && googleClientSecret);
 
   if (hasGoogleAuth) {
-    const callbackURL = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}/auth/google/callback`;
+    const baseURL = process.env.APP_URL || `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
+    const callbackURL = `${baseURL}/auth/google/callback`;
 
     passport.use(new GoogleStrategy({
       clientID: googleClientId!,
