@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, serial, text, integer, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, timestamp, varchar, unique } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -50,6 +50,12 @@ export const cachedResponses = pgTable("cached_responses", {
   feedbackCountAtGeneration: integer("feedback_count_at_generation").default(0).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
+
+export const analyticsEvents = pgTable("analytics_events", {
+  id: serial("id").primaryKey(),
+  ipHash: text("ip_hash").notNull(),
+  date: text("date").notNull(),
+}, (t) => [unique().on(t.ipHash, t.date)]);
 
 export const studentsRelations = relations(students, ({ many }) => ({
   feedback: many(feedback),

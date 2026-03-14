@@ -1,5 +1,5 @@
 import {
-  students, feedback, cachedResponses, users, socialLinks,
+  students, feedback, cachedResponses, users, socialLinks, analyticsEvents,
   type Student, type InsertStudent,
   type Feedback, type InsertFeedback,
   type CachedResponse,
@@ -7,6 +7,21 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, ilike, or, desc, sql, and } from "drizzle-orm";
+import { createHash } from "crypto";
+
+function hashIp(ip: string): string {
+  return createHash("sha256").update(ip).digest("hex").slice(0, 16);
+}
+
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysAgoStr(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
 
 export interface IStorage {
   searchStudents(query: string): Promise<Student[]>;
@@ -35,6 +50,11 @@ export interface IStorage {
   getSocialLinks(studentId: number): Promise<SocialLink[]>;
   setSocialLinks(studentId: number, links: { platform: string; url: string }[]): Promise<SocialLink[]>;
   invalidateCache(studentId: number): Promise<void>;
+
+  recordVisit(ip: string): Promise<void>;
+  getDailyActiveUsers(): Promise<number>;
+  getMonthlyActiveUsers(): Promise<number>;
+  getVerifiedActiveUsers(): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -162,6 +182,40 @@ export class DatabaseStorage implements IStorage {
 
   async invalidateCache(studentId: number): Promise<void> {
     await db.delete(cachedResponses).where(eq(cachedResponses.studentId, studentId));
+  }
+
+  async recordVisit(ip: string): Promise<void> {
+    const ipHash = hashIp(ip);
+    const date = todayStr();
+    await db.insert(analyticsEvents)
+      .values({ ipHash, date })
+      .onConflictDoNothing();
+  }
+
+  async getDailyActiveUsers(): Promise<number> {
+    const today = todayStr();
+    const result = await db
+      .selectDistinct({ ipHash: analyticsEvents.ipHash })
+      .from(analyticsEvents)
+      .where(eq(analyticsEvents.date, today));
+    return result.length;
+  }
+
+  async getMonthlyActiveUsers(): Promise<number> {
+    const cutoff = daysAgoStr(30);
+    const result = await db
+      .selectDistinct({ ipHash: analyticsEvents.ipHash })
+      .from(analyticsEvents)
+      .where(sql`${analyticsEvents.date} >= ${cutoff}`);
+    return result.length;
+  }
+
+  async getVerifiedActiveUsers(): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(sql`${users.studentId} IS NOT NULL`);
+    return Number(result[0]?.count ?? 0);
   }
 }
 

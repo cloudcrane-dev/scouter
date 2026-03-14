@@ -633,7 +633,11 @@ export async function registerRoutes(
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const student = await storage.getStudent(id);
       if (!student) return res.status(404).json({ error: "Student not found" });
-      await storage.incrementSearchCount(id);
+      const ip = getClientIP(req);
+      await Promise.all([
+        storage.incrementSearchCount(id),
+        storage.recordVisit(ip),
+      ]);
       res.json({ success: true });
     } catch (error) {
       console.error("View count error:", error);
@@ -817,8 +821,13 @@ export async function registerRoutes(
 
   app.get("/api/stats", async (req, res) => {
     try {
-      const count = await storage.getStudentCount();
-      res.json({ totalStudents: count });
+      const [totalStudents, dau, mau, vau] = await Promise.all([
+        storage.getStudentCount(),
+        storage.getDailyActiveUsers(),
+        storage.getMonthlyActiveUsers(),
+        storage.getVerifiedActiveUsers(),
+      ]);
+      res.json({ totalStudents, dau, mau, vau });
     } catch (error) {
       res.status(500).json({ error: "Failed to get stats" });
     }

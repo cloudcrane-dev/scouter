@@ -58,8 +58,9 @@ export default function HomePage() {
     }
   }, [error]);
 
-  const { data: stats } = useQuery<{ totalStudents: number }>({
+  const { data: stats } = useQuery<{ totalStudents: number; dau: number; mau: number; vau: number }>({
     queryKey: ["/api/stats"],
+    refetchInterval: 60000,
   });
 
   const { data: authStatus } = useQuery<{ googleAuthEnabled: boolean }>({
@@ -121,10 +122,23 @@ export default function HomePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
+            className="flex flex-wrap items-center justify-center gap-2 mb-6"
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1 border border-white/10 text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-6 font-mono">
+            <div className="inline-flex items-center gap-2 px-3 py-1 border border-white/10 text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-mono">
               <Terminal className="w-3 h-3" />
               <span>{stats?.totalStudents ?? "..."} nodes indexed</span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 border border-white/6 text-[10px] font-mono text-muted-foreground/70 uppercase tracking-widest">
+              <span className="text-foreground font-semibold">{stats?.dau ?? "—"}</span>
+              <span>dau</span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 border border-white/6 text-[10px] font-mono text-muted-foreground/70 uppercase tracking-widest">
+              <span className="text-foreground font-semibold">{stats?.mau ?? "—"}</span>
+              <span>mau</span>
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 border border-white/6 text-[10px] font-mono text-muted-foreground/70 uppercase tracking-widest">
+              <span className="text-foreground font-semibold">{stats?.vau ?? "—"}</span>
+              <span>verified</span>
             </div>
           </motion.div>
 
