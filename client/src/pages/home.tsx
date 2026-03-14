@@ -3,11 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Eye, Terminal, Shield, ShieldCheck } from "lucide-react";
+import { Search, Eye, Terminal, Shield } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { queryClient } from "@/lib/queryClient";
-import { useAuth } from "@/lib/auth";
-import { useToast } from "@/hooks/use-toast";
 import type { Student } from "@shared/schema";
 
 function getInitials(name: string) {
@@ -22,9 +19,6 @@ export default function HomePage() {
   const [limitHit, setLimitHit] = useState(false);
   const [, navigate] = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
-  const { isAuthenticated, user } = useAuth();
-
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 500);
     return () => clearTimeout(timer);
@@ -63,10 +57,6 @@ export default function HomePage() {
     refetchInterval: 60000,
   });
 
-  const { data: authStatus } = useQuery<{ googleAuthEnabled: boolean }>({
-    queryKey: ["/api/auth/status"],
-  });
-
   function handleSelect(student: Student) {
     setShowDropdown(false);
     setQuery("");
@@ -81,41 +71,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen relative z-10">
       <div className="relative">
-        {authStatus?.googleAuthEnabled && !isAuthenticated && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="absolute top-3 right-4"
-          >
-            <a
-              href="/auth/google"
-              data-testid="button-login"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-white/10 hover:border-white/25 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200"
-            >
-              <ShieldCheck className="w-3 h-3" />
-              iitj login
-            </a>
-          </motion.div>
-        )}
-
-        {isAuthenticated && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="absolute top-3 right-4"
-          >
-            <button
-              onClick={() => navigate("/profile")}
-              data-testid="button-profile-link"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-white/10 hover:border-white/25 text-[10px] font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition-all duration-200 cursor-pointer"
-            >
-              <ShieldCheck className="w-3 h-3 text-green-500" />
-              {user?.name?.split(" ")[0]}
-            </button>
-          </motion.div>
-        )}
 
         <div className="max-w-xl mx-auto px-4 pt-16 pb-10 text-center">
           <motion.div

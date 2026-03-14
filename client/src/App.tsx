@@ -10,11 +10,11 @@ import StudentPage from "@/pages/student";
 import LeaderboardPage from "@/pages/leaderboard";
 import ProfilePage from "@/pages/profile";
 
-import { Search, Trophy, User } from "lucide-react";
+import { Search, Trophy, User, ShieldCheck } from "lucide-react";
 
 function BottomNav() {
   const [location, navigate] = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const isHome = location === "/";
   const isLeaderboard = location === "/leaderboard";
   const isProfile = location === "/profile";
@@ -33,6 +33,7 @@ function BottomNav() {
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-foreground nav-indicator" />
           )}
         </button>
+
         <button
           data-testid="nav-leaderboard"
           onClick={() => navigate("/leaderboard")}
@@ -44,18 +45,36 @@ function BottomNav() {
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-foreground nav-indicator" />
           )}
         </button>
-        {isAuthenticated && (
+
+        {!isLoading && isAuthenticated && (
           <button
             data-testid="nav-profile"
             onClick={() => navigate("/profile")}
             className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] uppercase tracking-[0.15em] transition-all duration-200 relative cursor-pointer"
           >
-            <User className={`w-4 h-4 transition-colors duration-200 ${isProfile ? "text-foreground" : "text-muted-foreground/50"}`} />
-            <span className={`transition-colors duration-200 ${isProfile ? "text-foreground" : "text-muted-foreground/50"}`}>profile</span>
+            {user?.pictureUrl ? (
+              <img src={user.pictureUrl} alt={user.name} className={`w-4 h-4 rounded-full object-cover border transition-colors duration-200 ${isProfile ? "border-foreground/60" : "border-white/20"}`} />
+            ) : (
+              <User className={`w-4 h-4 transition-colors duration-200 ${isProfile ? "text-foreground" : "text-muted-foreground/50"}`} />
+            )}
+            <span className={`transition-colors duration-200 ${isProfile ? "text-foreground" : "text-muted-foreground/50"}`}>
+              {user?.name?.split(" ")[0] ?? "profile"}
+            </span>
             {isProfile && (
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-foreground nav-indicator" />
             )}
           </button>
+        )}
+
+        {!isLoading && !isAuthenticated && (
+          <a
+            href="/auth/google"
+            data-testid="nav-login"
+            className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] uppercase tracking-[0.15em] transition-all duration-200 relative group border-t-2 border-foreground/60 -mt-px"
+          >
+            <ShieldCheck className="w-4 h-4 text-foreground group-hover:scale-110 transition-transform duration-200" />
+            <span className="text-foreground font-semibold">iitj login</span>
+          </a>
         )}
       </div>
     </nav>
