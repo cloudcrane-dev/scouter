@@ -10,13 +10,12 @@ import StudentPage from "@/pages/student";
 import LeaderboardPage from "@/pages/leaderboard";
 import ProfilePage from "@/pages/profile";
 
-import { Search, Trophy, User, ShieldCheck } from "lucide-react";
+import { Search, User, ShieldCheck } from "lucide-react";
 
 function BottomNav() {
   const [location, navigate] = useLocation();
   const { isAuthenticated, isLoading, user } = useAuth();
   const isHome = location === "/";
-  const isLeaderboard = location === "/leaderboard";
   const isProfile = location === "/profile";
 
   return (
@@ -30,18 +29,6 @@ function BottomNav() {
           <Search className={`w-4 h-4 transition-colors duration-200 ${isHome ? "text-foreground" : "text-muted-foreground/50"}`} />
           <span className={`transition-colors duration-200 ${isHome ? "text-foreground" : "text-muted-foreground/50"}`}>search</span>
           {isHome && (
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-foreground nav-indicator" />
-          )}
-        </button>
-
-        <button
-          data-testid="nav-leaderboard"
-          onClick={() => navigate("/leaderboard")}
-          className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] uppercase tracking-[0.15em] transition-all duration-200 relative cursor-pointer"
-        >
-          <Trophy className={`w-4 h-4 transition-colors duration-200 ${isLeaderboard ? "text-foreground" : "text-muted-foreground/50"}`} />
-          <span className={`transition-colors duration-200 ${isLeaderboard ? "text-foreground" : "text-muted-foreground/50"}`}>ranks</span>
-          {isLeaderboard && (
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-px bg-foreground nav-indicator" />
           )}
         </button>
