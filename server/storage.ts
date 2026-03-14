@@ -13,6 +13,12 @@ function hashIp(ip: string): string {
   return createHash("sha256").update(ip).digest("hex").slice(0, 16);
 }
 
+export function computeProfileStrength(ratings: Record<string, number>): number {
+  const keys = ["onlinePresence", "codingActivity", "realWorldExperience", "profileCompleteness"];
+  const sum = keys.reduce((acc, k) => acc + (ratings[k] ?? 1), 0);
+  return Math.round((sum / (keys.length * 5)) * 100);
+}
+
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -37,7 +43,7 @@ export interface IStorage {
   getCachedResponse(studentId: number): Promise<CachedResponse | undefined>;
   saveCachedResponse(studentId: number, response: string, feedbackCount: number, ratings?: string): Promise<CachedResponse>;
 
-  getLeaderboard(sortBy: "searches" | "feedback", limit?: number): Promise<Student[]>;
+  getLeaderboard(sortBy: "searches" | "feedback" | "strength", limit?: number): Promise<Student[]>;
   getStudentCount(): Promise<number>;
 
   findUserByGoogleId(googleId: string): Promise<User | undefined>;
@@ -124,10 +130,24 @@ export class DatabaseStorage implements IStorage {
       ratings: ratings ?? null,
       feedbackCountAtGeneration: feedbackCount,
     }).returning();
+
+    if (ratings) {
+      try {
+        const parsed = JSON.parse(ratings) as Record<string, number>;
+        const strength = computeProfileStrength(parsed);
+        await db.update(students).set({ profileStrength: strength }).where(eq(students.id, studentId));
+      } catch { /* ignore parse errors */ }
+    }
+
     return created;
   }
 
-  async getLeaderboard(sortBy: "searches" | "feedback", limit = 20): Promise<Student[]> {
+  async getLeaderboard(sortBy: "searches" | "feedback" | "strength", limit = 20): Promise<Student[]> {
+    if (sortBy === "strength") {
+      return db.select().from(students)
+        .where(sql`${students.profileStrength} IS NOT NULL`)
+        .orderBy(desc(students.profileStrength)).limit(limit);
+    }
     const orderCol = sortBy === "searches" ? students.searchCount : students.feedbackCount;
     return db.select().from(students)
       .where(sortBy === "searches" ? sql`${students.searchCount} > 0` : sql`${students.feedbackCount} > 0`)

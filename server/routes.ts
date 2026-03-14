@@ -814,7 +814,8 @@ export async function registerRoutes(
 
   app.get("/api/leaderboard", async (req, res) => {
     try {
-      const sortBy = (req.query.sort as string) === "feedback" ? "feedback" : "searches";
+      const rawSort = req.query.sort as string;
+      const sortBy = rawSort === "feedback" ? "feedback" : rawSort === "strength" ? "strength" : "searches";
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
       const leaderboard = await storage.getLeaderboard(sortBy, limit);
       res.json(leaderboard);

@@ -17,7 +17,7 @@ export default function HomePage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [limitHit, setLimitHit] = useState(false);
-  const [sortBy, setSortBy] = useState<"searches" | "feedback">("searches");
+  const [sortBy, setSortBy] = useState<"searches" | "feedback" | "strength">("strength");
   const [leaderboardLimit, setLeaderboardLimit] = useState(20);
   const [, navigate] = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -230,10 +230,16 @@ export default function HomePage() {
                           <p className="font-mono text-xs tracking-wide truncate">{student.name}</p>
                           <p className="text-[10px] text-muted-foreground truncate font-mono">{student.email}</p>
                         </div>
-                        <span className="text-[10px] text-muted-foreground font-mono shrink-0 flex items-center gap-1">
-                          <Eye className="w-3 h-3" />
-                          {student.searchCount}
-                        </span>
+                        {student.profileStrength != null ? (
+                          <span className="text-[10px] font-mono shrink-0 tabular-nums font-semibold text-foreground/70" data-testid={`text-strength-${student.id}`}>
+                            {student.profileStrength}<span className="text-muted-foreground/50 font-normal text-[9px]">/100</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground font-mono shrink-0 flex items-center gap-1">
+                            <Eye className="w-3 h-3" />
+                            {student.searchCount}
+                          </span>
+                        )}
                       </motion.button>
                     ))}
                   </div>
@@ -273,9 +279,20 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center border border-white/8 overflow-hidden">
                   <button
+                    onClick={() => { setSortBy("strength"); setLeaderboardLimit(20); }}
+                    data-testid="button-sort-strength"
+                    className={`flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer ${
+                      sortBy === "strength"
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    strength
+                  </button>
+                  <button
                     onClick={() => { setSortBy("searches"); setLeaderboardLimit(20); }}
                     data-testid="button-sort-searches"
-                    className={`flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer ${
+                    className={`flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer border-l border-white/8 ${
                       sortBy === "searches"
                         ? "bg-foreground text-background"
                         : "text-muted-foreground hover:text-foreground"
@@ -352,14 +369,23 @@ export default function HomePage() {
                         <p className="text-[10px] text-muted-foreground truncate font-mono">{student.rollNumber ?? student.email}</p>
                       </div>
                       <div className="flex items-center gap-2.5 shrink-0 text-[10px] text-muted-foreground font-mono">
-                        <span className="flex items-center gap-0.5">
-                          <Eye className="w-2.5 h-2.5" />
-                          {student.searchCount}
-                        </span>
-                        <span className="flex items-center gap-0.5">
-                          <MessageSquare className="w-2.5 h-2.5" />
-                          {student.feedbackCount}
-                        </span>
+                        {sortBy === "strength" && student.profileStrength != null ? (
+                          <span className="flex items-center gap-0.5 font-bold text-foreground tabular-nums text-xs">
+                            {student.profileStrength}
+                            <span className="text-[8px] text-muted-foreground font-normal">/100</span>
+                          </span>
+                        ) : (
+                          <>
+                            <span className="flex items-center gap-0.5">
+                              <Eye className="w-2.5 h-2.5" />
+                              {student.searchCount}
+                            </span>
+                            <span className="flex items-center gap-0.5">
+                              <MessageSquare className="w-2.5 h-2.5" />
+                              {student.feedbackCount}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </motion.div>
                   ))

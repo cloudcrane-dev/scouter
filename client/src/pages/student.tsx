@@ -264,6 +264,36 @@ export default function StudentPage() {
           transition={{ duration: 0.4 }}
           className="border border-white/8 bg-card p-5 mb-3"
         >
+          {/* Profile Strength Hero */}
+          {student.profileStrength != null && (
+            <div className="mb-4 pb-4 border-b border-white/8" data-testid="profile-strength-hero">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[9px] font-mono uppercase tracking-[0.25em] text-muted-foreground/50 mb-1">profile strength</p>
+                  <div className="flex items-end gap-1.5">
+                    <span className="text-4xl font-bold tracking-tighter text-foreground font-mono" style={{ fontVariationSettings: "'wght' 800" }}>
+                      {student.profileStrength}
+                    </span>
+                    <span className="text-sm text-muted-foreground font-mono mb-1">/100</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/50 mb-1">
+                    {student.profileStrength >= 80 ? "elite" : student.profileStrength >= 60 ? "strong" : student.profileStrength >= 40 ? "building" : "early"}
+                  </p>
+                  <div className="w-24 h-1.5 bg-white/5 overflow-hidden">
+                    <motion.div
+                      className="h-full bg-foreground"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${student.profileStrength}%` }}
+                      transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-start gap-4">
             {student.pictureUrl ? (
               <img

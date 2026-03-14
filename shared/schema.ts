@@ -15,6 +15,7 @@ export const students = pgTable("students", {
   pictureUrl: text("picture_url"),
   searchCount: integer("search_count").default(0).notNull(),
   feedbackCount: integer("feedback_count").default(0).notNull(),
+  profileStrength: integer("profile_strength"),
 });
 
 export const users = pgTable("users", {
