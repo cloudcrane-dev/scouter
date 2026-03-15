@@ -1,17 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, LogOut, Plus, Trash2, Save, User, Link as LinkIcon,
-  ExternalLink, ShieldCheck,
+  ExternalLink, ShieldCheck, Eye, MessageSquare, Camera, Sparkles,
 } from "lucide-react";
 import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
+import type { Student } from "@shared/schema";
 
 const PLATFORM_OPTIONS = [
   { value: "github", label: "GitHub", icon: SiGithub, placeholder: "https://github.com/username" },
@@ -38,6 +39,13 @@ export default function ProfilePage() {
   const { toast } = useToast();
   const [links, setLinks] = useState<LinkEntry[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: studentData } = useQuery<Student>({
+    queryKey: ["/api/students", user?.studentId?.toString()],
+    enabled: !!user?.studentId,
+  });
 
   const { data: existingLinks, isLoading: linksLoading } = useQuery<{ id: number; platform: string; url: string }[]>({
     queryKey: ["/api/students", user?.studentId?.toString(), "social-links"],
@@ -68,6 +76,23 @@ export default function ProfilePage() {
     },
   });
 
+  const pictureMutation = useMutation({
+    mutationFn: async (pictureUrl: string) => {
+      const res = await apiRequest("PUT", `/api/students/${user!.studentId}/picture`, { pictureUrl });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/me"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/students", user?.studentId?.toString()] });
+      toast({ title: "photo updated", description: "your profile photo has been changed." });
+      setPreviewUrl(null);
+    },
+    onError: () => {
+      toast({ title: "error", description: "failed to update photo.", variant: "destructive" });
+      setPreviewUrl(null);
+    },
+  });
+
   const logoutMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/auth/logout");
@@ -77,6 +102,26 @@ export default function ProfilePage() {
       navigate("/");
     },
   });
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "invalid file", description: "please select an image file.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "file too large", description: "max 2MB per photo.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setPreviewUrl(dataUrl);
+      pictureMutation.mutate(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  }
 
   function addLink() {
     const usedPlatforms = new Set(links.map(l => l.platform));
@@ -126,6 +171,8 @@ export default function ProfilePage() {
     );
   }
 
+  const currentPhoto = previewUrl || studentData?.pictureUrl || user?.pictureUrl;
+
   return (
     <div className="min-h-screen relative z-10">
       <div className="relative max-w-xl mx-auto px-4 py-4">
@@ -141,6 +188,7 @@ export default function ProfilePage() {
           </Button>
         </motion.div>
 
+        {/* Profile card */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -149,16 +197,55 @@ export default function ProfilePage() {
         >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              {user?.pictureUrl ? (
-                <img src={user.pictureUrl} alt={user.name} className="w-10 h-10 border border-white/15 object-cover" data-testid="img-profile-avatar" />
-              ) : (
-                <div className="w-10 h-10 border border-white/15 flex items-center justify-center text-xs font-bold text-muted-foreground">
-                  {user?.name?.charAt(0)?.toUpperCase()}
-                </div>
-              )}
+              {/* Avatar with change photo overlay */}
+              <div className="relative group shrink-0">
+                {currentPhoto ? (
+                  <img
+                    src={currentPhoto}
+                    alt={user?.name}
+                    className="w-14 h-14 border border-white/15 object-cover"
+                    data-testid="img-profile-avatar"
+                  />
+                ) : (
+                  <div className="w-14 h-14 border border-white/15 flex items-center justify-center text-sm font-bold text-muted-foreground">
+                    {user?.name?.charAt(0)?.toUpperCase()}
+                  </div>
+                )}
+                {user?.studentId && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={pictureMutation.isPending}
+                    className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-pointer"
+                    data-testid="button-change-photo"
+                    title="Change photo"
+                  >
+                    <Camera className="w-4 h-4 text-white" />
+                  </button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                  data-testid="input-photo-upload"
+                />
+              </div>
+
               <div>
                 <h1 className="text-sm font-bold font-mono tracking-tight" data-testid="text-profile-name">{user?.name}</h1>
                 <p className="text-[10px] text-muted-foreground font-mono" data-testid="text-profile-email">{user?.email}</p>
+                {user?.studentId && (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={pictureMutation.isPending}
+                    className="mt-0.5 flex items-center gap-1 text-[9px] text-muted-foreground/50 hover:text-muted-foreground font-mono transition-colors cursor-pointer"
+                    data-testid="button-change-photo-text"
+                  >
+                    <Camera className="w-2.5 h-2.5" />
+                    {pictureMutation.isPending ? "uploading..." : "change photo"}
+                  </button>
+                )}
               </div>
             </div>
             <Button
@@ -173,6 +260,29 @@ export default function ProfilePage() {
               logout
             </Button>
           </div>
+
+          {/* Stats row */}
+          {studentData && (
+            <div className="flex items-center gap-4 mb-3 pb-3 border-b border-white/5">
+              <div className="flex items-center gap-1.5 text-[10px] font-mono" data-testid="stat-views">
+                <Eye className="w-3 h-3 text-muted-foreground" />
+                <span className="font-semibold text-foreground">{studentData.searchCount}</span>
+                <span className="text-muted-foreground">views</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] font-mono" data-testid="stat-insights">
+                <MessageSquare className="w-3 h-3 text-muted-foreground" />
+                <span className="font-semibold text-foreground">{studentData.feedbackCount}</span>
+                <span className="text-muted-foreground">insights</span>
+              </div>
+              {studentData.profileStrength != null && (
+                <div className="flex items-center gap-1.5 text-[10px] font-mono" data-testid="stat-strength">
+                  <Sparkles className="w-3 h-3 text-muted-foreground" />
+                  <span className="font-semibold text-foreground">{studentData.profileStrength}</span>
+                  <span className="text-muted-foreground">/100 strength</span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
             <ShieldCheck className="w-3 h-3 text-green-500" />
@@ -259,6 +369,15 @@ export default function ProfilePage() {
                     no links added yet. add your github, linkedin, etc.
                   </p>
                 )}
+
+                {/* Score nudge */}
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-white/3 border border-white/8 mt-1" data-testid="social-links-nudge">
+                  <Sparkles className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+                    adding social links lets the AI scan your real-time activity — GitHub commits, LeetCode streaks, LinkedIn experience —
+                    which directly raises your <span className="text-foreground font-semibold">profile strength score</span>.
+                  </p>
+                </div>
 
                 {hasChanges && (
                   <Button

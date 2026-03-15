@@ -810,6 +810,33 @@ export async function registerRoutes(
     }
   });
 
+  app.put("/api/students/:id/picture", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+
+      const user = req.user as any;
+      if (user.studentId !== id) return res.status(403).json({ error: "You can only update your own photo." });
+
+      const { pictureUrl } = req.body;
+      if (!pictureUrl || typeof pictureUrl !== "string") {
+        return res.status(400).json({ error: "pictureUrl is required" });
+      }
+
+      const isDataUrl = pictureUrl.startsWith("data:image/");
+      const isHttpUrl = pictureUrl.startsWith("http://") || pictureUrl.startsWith("https://");
+      if (!isDataUrl && !isHttpUrl) {
+        return res.status(400).json({ error: "pictureUrl must be a valid image URL or data URL" });
+      }
+
+      await storage.updateStudentPicture(id, pictureUrl);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Update picture error:", error);
+      res.status(500).json({ error: "Failed to update photo" });
+    }
+  });
+
   app.get("/api/leaderboard", async (req, res) => {
     try {
       const rawSort = req.query.sort as string;

@@ -55,6 +55,7 @@ export interface IStorage {
 
   getSocialLinks(studentId: number): Promise<SocialLink[]>;
   setSocialLinks(studentId: number, links: { platform: string; url: string }[]): Promise<SocialLink[]>;
+  updateStudentPicture(studentId: number, pictureUrl: string): Promise<void>;
   invalidateCache(studentId: number): Promise<void>;
 
   recordVisit(ip: string): Promise<void>;
@@ -198,6 +199,10 @@ export class DatabaseStorage implements IStorage {
     if (links.length === 0) return [];
     const values = links.map(l => ({ studentId, platform: l.platform, url: l.url }));
     return db.insert(socialLinks).values(values).returning();
+  }
+
+  async updateStudentPicture(studentId: number, pictureUrl: string): Promise<void> {
+    await db.update(students).set({ pictureUrl }).where(eq(students.id, studentId));
   }
 
   async invalidateCache(studentId: number): Promise<void> {
