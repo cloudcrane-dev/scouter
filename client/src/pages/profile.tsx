@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, LogOut, Plus, Trash2, Save, User, Link as LinkIcon,
-  ExternalLink, ShieldCheck, Eye, MessageSquare, Camera, Sparkles,
+  ExternalLink, ShieldCheck, Eye, MessageSquare, Camera, Sparkles, Lock,
 } from "lucide-react";
 import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -49,6 +49,11 @@ export default function ProfilePage() {
 
   const { data: existingLinks, isLoading: linksLoading } = useQuery<{ id: number; platform: string; url: string }[]>({
     queryKey: ["/api/students", user?.studentId?.toString(), "social-links"],
+    enabled: !!user?.studentId,
+  });
+
+  const { data: myInsights, isLoading: insightsLoading } = useQuery<{ id: number; content: string; createdAt: string }[]>({
+    queryKey: ["/api/students", user?.studentId?.toString(), "feedback"],
     enabled: !!user?.studentId,
   });
 
@@ -398,11 +403,56 @@ export default function ProfilePage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="border border-white/8 bg-card p-5 mb-20"
+            className="border border-white/8 bg-card p-5 mb-3"
           >
             <p className="text-xs text-muted-foreground font-mono">
               your email wasn't found in the student database. social links require a matching student profile.
             </p>
+          </motion.div>
+        )}
+
+        {/* Insights section — only when claimed */}
+        {user?.studentId && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2 }}
+            className="border border-white/8 bg-card p-5 mb-20"
+          >
+            <div className="flex items-center gap-2 font-mono mb-4">
+              <Lock className="w-3.5 h-3.5 text-foreground" />
+              <h2 className="font-semibold text-xs uppercase tracking-widest">peer insights</h2>
+              <span className="text-[9px] text-muted-foreground border border-white/8 px-1.5 py-0.5 uppercase tracking-wider">
+                private · only you can see this
+              </span>
+            </div>
+
+            {insightsLoading ? (
+              <p className="text-xs text-muted-foreground font-mono">loading...</p>
+            ) : !myInsights || myInsights.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground font-mono py-2">
+                no insights yet. when peers submit anonymous insights about you, they'll appear here.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {myInsights.map((insight, i) => (
+                  <div
+                    key={insight.id}
+                    className="border border-white/6 bg-white/2 px-4 py-3"
+                    data-testid={`insight-item-${i}`}
+                  >
+                    <p className="text-xs font-mono text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                      {insight.content}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground/40 font-mono mt-2">
+                      {new Date(insight.createdAt).toLocaleDateString("en-IN", {
+                        day: "numeric", month: "short", year: "numeric"
+                      })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </div>

@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { sendInsightNotification } from "./email";
 import OpenAI from "openai";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
@@ -747,6 +748,14 @@ export async function registerRoutes(
         authorName: typeof authorName === "string" ? authorName.trim().slice(0, 100) || null : null,
       });
       res.status(201).json(fb);
+
+      if (student.email) {
+        sendInsightNotification({
+          toEmail: student.email,
+          studentName: student.name,
+          studentId: id,
+        }).catch((err) => console.error("Email notification failed:", err));
+      }
     } catch (error) {
       console.error("Add feedback error:", error);
       res.status(500).json({ error: "Failed to add feedback" });
