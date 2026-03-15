@@ -241,7 +241,7 @@ export default function StudentPage() {
       queryClient.setQueryData(["/api/students", id.toString(), "analyze"], data);
       queryClient.invalidateQueries({ queryKey: ["/api/search-limit"] });
       analysisLoadedAtRef.current = Date.now();
-      if (data.cachedResponseId) currentCachedResponseIdRef.current = data.cachedResponseId;
+      currentCachedResponseIdRef.current = data.cachedResponseId ?? null;
       setUserReaction(null);
       setSelectedChips([]);
       setChipSubmitted(false);
