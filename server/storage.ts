@@ -22,7 +22,7 @@ export type PersonalityData = {
   myRating: Record<string, number> | null;
 };
 import { db } from "./db";
-import { eq, ilike, or, desc, sql, and } from "drizzle-orm";
+import { eq, ilike, or, desc, sql, and, inArray } from "drizzle-orm";
 import { createHash } from "crypto";
 
 function hashIp(ip: string): string {
@@ -429,7 +429,7 @@ export class DatabaseStorage implements IStorage {
       pictureUrl: students.pictureUrl, searchCount: students.searchCount, feedbackCount: students.feedbackCount,
       profileStrength: students.profileStrength, phone: students.phone,
       userId: users.id,
-    }).from(students).leftJoin(users, eq(users.studentId, students.id)).where(sql`${students.id} = ANY(ARRAY[${sql.raw(studentIds.join(","))}]::int[])`);
+    }).from(students).leftJoin(users, eq(users.studentId, students.id)).where(inArray(students.id, studentIds));
 
     const traitMeta = Object.fromEntries(PERSONALITY_TRAITS.map(t => [t.key, t]));
 
