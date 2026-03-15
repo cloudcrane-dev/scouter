@@ -145,7 +145,9 @@ export class DatabaseStorage implements IStorage {
       try {
         const parsed = JSON.parse(ratings) as Record<string, number>;
         const strength = computeProfileStrength(parsed);
-        await db.update(students).set({ profileStrength: strength }).where(eq(students.id, studentId));
+        await db.update(students).set({ profileStrength: strength }).where(
+          and(eq(students.id, studentId), sql`(${students.profileStrength} IS NULL OR ${students.profileStrength} < ${strength})`)
+        );
       } catch { /* ignore parse errors */ }
     }
 
