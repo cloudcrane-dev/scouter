@@ -98,9 +98,23 @@ export const cachedResponsesRelations = relations(cachedResponses, ({ one }) => 
   student: one(students, { fields: [cachedResponses.studentId], references: [students.id] }),
 }));
 
+export const personalityRatings = pgTable("personality_ratings", {
+  id: serial("id").primaryKey(),
+  raterId: integer("rater_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  rateeId: integer("ratee_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  trait: text("trait").notNull(),
+  score: integer("score").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => [unique().on(t.raterId, t.rateeId, t.trait)]);
+
 export const analysisReactionsRelations = relations(analysisReactions, ({ one }) => ({
   cachedResponse: one(cachedResponses, { fields: [analysisReactions.cachedResponseId], references: [cachedResponses.id] }),
   student: one(students, { fields: [analysisReactions.studentId], references: [students.id] }),
+}));
+
+export const personalityRatingsRelations = relations(personalityRatings, ({ one }) => ({
+  rater: one(users, { fields: [personalityRatings.raterId], references: [users.id] }),
+  ratee: one(students, { fields: [personalityRatings.rateeId], references: [students.id] }),
 }));
 
 export const insertStudentSchema = createInsertSchema(students).omit({
@@ -127,3 +141,17 @@ export type User = typeof users.$inferSelect;
 export type SocialLink = typeof socialLinks.$inferSelect;
 export type InsertSocialLink = z.infer<typeof insertSocialLinkSchema>;
 export type AnalysisReaction = typeof analysisReactions.$inferSelect;
+export type PersonalityRating = typeof personalityRatings.$inferSelect;
+
+export const PERSONALITY_TRAITS = [
+  { key: "funny",           label: "Funny",           emoji: "😂" },
+  { key: "charming",        label: "Charming",         emoji: "✨" },
+  { key: "charismatic",     label: "Charismatic",      emoji: "⚡" },
+  { key: "empathetic",      label: "Empathetic",       emoji: "💙" },
+  { key: "arrogant",        label: "Arrogant",         emoji: "😤" },
+  { key: "mysterious",      label: "Mysterious",       emoji: "🌙" },
+  { key: "intense",         label: "Intense",          emoji: "🔥" },
+  { key: "brutally_honest", label: "Brutally Honest",  emoji: "🎯" },
+] as const;
+
+export type PersonalityTraitKey = typeof PERSONALITY_TRAITS[number]["key"];

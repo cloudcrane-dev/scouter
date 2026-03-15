@@ -1,11 +1,25 @@
 import {
-  students, feedback, cachedResponses, users, socialLinks, analyticsEvents, analysisReactions, emailNotifications,
+  students, feedback, cachedResponses, users, socialLinks, analyticsEvents, analysisReactions, emailNotifications, personalityRatings,
+  PERSONALITY_TRAITS,
   type Student, type InsertStudent,
   type Feedback, type InsertFeedback,
   type CachedResponse,
   type User, type SocialLink, type InsertSocialLink,
   type AnalysisReaction,
 } from "@shared/schema";
+
+export type LeaderboardEntry = Student & { verified: boolean };
+export type PersonalityEntry = {
+  id: number; name: string; email: string; rollNumber: string | null;
+  pictureUrl: string | null; searchCount: number; feedbackCount: number; profileStrength: number | null;
+  personalityScore: number; raterCount: number; verified: boolean;
+  topTraits: { trait: string; label: string; emoji: string; score: number }[];
+};
+export type PersonalityData = {
+  traits: { key: string; label: string; emoji: string; avgScore: number }[];
+  totalScore: number; raterCount: number;
+  myRating: Record<string, number> | null;
+};
 import { db } from "./db";
 import { eq, ilike, or, desc, sql, and } from "drizzle-orm";
 import { createHash } from "crypto";
@@ -71,6 +85,11 @@ export interface IStorage {
   getBottomStrengthStudents(limit?: number): Promise<Student[]>;
   hasEmailBeenSent(studentId: number, emailType: string, weekKey: string): Promise<boolean>;
   recordEmailSent(studentId: number, emailType: string, weekKey: string): Promise<void>;
+
+  getLeaderboardWithVerified(sortBy: "searches" | "feedback" | "strength", limit?: number): Promise<LeaderboardEntry[]>;
+  submitPersonalityRatings(raterId: number, rateeId: number, ratings: { trait: string; score: number }[]): Promise<void>;
+  getPersonalityData(rateeId: number, raterId?: number): Promise<PersonalityData>;
+  getPersonalityLeaderboard(limit?: number): Promise<PersonalityEntry[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -314,6 +333,118 @@ export class DatabaseStorage implements IStorage {
     await db.insert(emailNotifications)
       .values({ studentId, emailType, weekKey })
       .onConflictDoNothing();
+  }
+
+  async getLeaderboardWithVerified(sortBy: "searches" | "feedback" | "strength", limit = 20): Promise<LeaderboardEntry[]> {
+    const whereExpr = sortBy === "strength"
+      ? sql`${students.profileStrength} IS NOT NULL`
+      : sortBy === "searches" ? sql`${students.searchCount} > 0` : sql`${students.feedbackCount} > 0`;
+    const orderExpr = sortBy === "strength" ? desc(students.profileStrength)
+      : sortBy === "searches" ? desc(students.searchCount) : desc(students.feedbackCount);
+    const rows = await db.select({
+      id: students.id, name: students.name, email: students.email, rollNumber: students.rollNumber,
+      phone: students.phone, pictureUrl: students.pictureUrl, searchCount: students.searchCount,
+      feedbackCount: students.feedbackCount, profileStrength: students.profileStrength,
+      verified: sql<boolean>`EXISTS(SELECT 1 FROM users WHERE users.student_id = ${students.id})`,
+    }).from(students).where(whereExpr).orderBy(orderExpr).limit(limit);
+    return rows as LeaderboardEntry[];
+  }
+
+  async submitPersonalityRatings(raterId: number, rateeId: number, ratings: { trait: string; score: number }[]): Promise<void> {
+    const validKeys = new Set(PERSONALITY_TRAITS.map(t => t.key));
+    const valid = ratings.filter(r => validKeys.has(r.trait) && r.score >= 1 && r.score <= 5);
+    if (valid.length === 0) return;
+    await db.insert(personalityRatings)
+      .values(valid.map(r => ({ raterId, rateeId, trait: r.trait, score: r.score })))
+      .onConflictDoUpdate({
+        target: [personalityRatings.raterId, personalityRatings.rateeId, personalityRatings.trait],
+        set: { score: sql`excluded.score`, createdAt: sql`CURRENT_TIMESTAMP` },
+      });
+  }
+
+  async getPersonalityData(rateeId: number, raterId?: number): Promise<PersonalityData> {
+    const rows = await db.select({
+      trait: personalityRatings.trait,
+      score: personalityRatings.score,
+      rater: personalityRatings.raterId,
+    }).from(personalityRatings).where(eq(personalityRatings.rateeId, rateeId));
+
+    const traitTotals: Record<string, { sum: number; count: number }> = {};
+    const raterSet = new Set<number>();
+    const myRatingMap: Record<string, number> = {};
+
+    for (const row of rows) {
+      raterSet.add(row.rater);
+      if (!traitTotals[row.trait]) traitTotals[row.trait] = { sum: 0, count: 0 };
+      traitTotals[row.trait].sum += row.score;
+      traitTotals[row.trait].count++;
+      if (raterId && row.rater === raterId) myRatingMap[row.trait] = row.score;
+    }
+
+    const traits = PERSONALITY_TRAITS.map(t => ({
+      key: t.key, label: t.label, emoji: t.emoji,
+      avgScore: traitTotals[t.key] ? traitTotals[t.key].sum / traitTotals[t.key].count : 0,
+    }));
+
+    const ratedTraits = traits.filter(t => t.avgScore > 0);
+    const totalScore = ratedTraits.length > 0
+      ? Math.round((ratedTraits.reduce((s, t) => s + t.avgScore, 0) / ratedTraits.length) / 5 * 100)
+      : 0;
+
+    return {
+      traits,
+      totalScore,
+      raterCount: raterSet.size,
+      myRating: Object.keys(myRatingMap).length > 0 ? myRatingMap : null,
+    };
+  }
+
+  async getPersonalityLeaderboard(limit = 20): Promise<PersonalityEntry[]> {
+    const rows = await db.select({
+      rateeId: personalityRatings.rateeId,
+      trait: personalityRatings.trait,
+      avgScore: sql<number>`AVG(${personalityRatings.score})`,
+      raterCount: sql<number>`COUNT(DISTINCT ${personalityRatings.raterId})`,
+    }).from(personalityRatings)
+      .groupBy(personalityRatings.rateeId, personalityRatings.trait);
+
+    const byStudent: Record<number, { traits: Record<string, number>; raterCount: number }> = {};
+    for (const row of rows) {
+      if (!byStudent[row.rateeId]) byStudent[row.rateeId] = { traits: {}, raterCount: Number(row.raterCount) };
+      byStudent[row.rateeId].traits[row.trait] = Number(row.avgScore);
+      byStudent[row.rateeId].raterCount = Math.max(byStudent[row.rateeId].raterCount, Number(row.raterCount));
+    }
+
+    const studentIds = Object.keys(byStudent).map(Number);
+    if (studentIds.length === 0) return [];
+
+    const studentRows = await db.select({
+      id: students.id, name: students.name, email: students.email, rollNumber: students.rollNumber,
+      pictureUrl: students.pictureUrl, searchCount: students.searchCount, feedbackCount: students.feedbackCount,
+      profileStrength: students.profileStrength, phone: students.phone,
+      verified: sql<boolean>`EXISTS(SELECT 1 FROM users WHERE users.student_id = ${students.id})`,
+    }).from(students).where(sql`${students.id} = ANY(ARRAY[${sql.raw(studentIds.join(","))}]::int[])`);
+
+    const entries: PersonalityEntry[] = studentRows.map(s => {
+      const data = byStudent[s.id];
+      const ratedTraits = Object.entries(data.traits).filter(([, v]) => v > 0);
+      const totalScore = ratedTraits.length > 0
+        ? Math.round((ratedTraits.reduce((sum, [, v]) => sum + v, 0) / ratedTraits.length) / 5 * 100)
+        : 0;
+      const topTraits = PERSONALITY_TRAITS
+        .filter(t => data.traits[t.key] != null)
+        .map(t => ({ trait: t.key, label: t.label, emoji: t.emoji, score: Number((data.traits[t.key]).toFixed(1)) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+      return {
+        id: s.id, name: s.name, email: s.email, rollNumber: s.rollNumber,
+        pictureUrl: s.pictureUrl, searchCount: s.searchCount, feedbackCount: s.feedbackCount,
+        profileStrength: s.profileStrength, personalityScore: totalScore,
+        raterCount: data.raterCount, verified: Boolean(s.verified), topTraits,
+      };
+    }).sort((a, b) => b.personalityScore - a.personalityScore).slice(0, limit);
+
+    return entries;
   }
 
   async getPriorReactionContext(studentId: number): Promise<string> {

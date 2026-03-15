@@ -912,13 +912,48 @@ export async function registerRoutes(
   app.get("/api/leaderboard", async (req, res) => {
     try {
       const rawSort = req.query.sort as string;
-      const sortBy = rawSort === "feedback" ? "feedback" : rawSort === "strength" ? "strength" : "searches";
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-      const leaderboard = await storage.getLeaderboard(sortBy, limit);
+      if (rawSort === "personality") {
+        const leaderboard = await storage.getPersonalityLeaderboard(limit);
+        return res.json(leaderboard);
+      }
+      const sortBy = rawSort === "feedback" ? "feedback" : rawSort === "strength" ? "strength" : "searches";
+      const leaderboard = await storage.getLeaderboardWithVerified(sortBy, limit);
       res.json(leaderboard);
     } catch (error) {
       console.error("Leaderboard error:", error);
       res.status(500).json({ error: "Failed to get leaderboard" });
+    }
+  });
+
+  app.get("/api/students/:id/personality", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const user = req.user as any;
+      const raterId = user?.id ?? undefined;
+      const data = await storage.getPersonalityData(id, raterId);
+      res.json(data);
+    } catch (error) {
+      console.error("Personality data error:", error);
+      res.status(500).json({ error: "Failed to get personality data" });
+    }
+  });
+
+  app.post("/api/students/:id/personality-rate", isAuthenticated, async (req, res) => {
+    try {
+      const rateeId = parseInt(req.params.id);
+      if (isNaN(rateeId)) return res.status(400).json({ error: "Invalid student ID" });
+      const user = req.user as any;
+      if (user.studentId === rateeId) return res.status(403).json({ error: "You cannot rate yourself." });
+      const { ratings } = req.body;
+      if (!Array.isArray(ratings) || ratings.length === 0) return res.status(400).json({ error: "ratings array required" });
+      await storage.submitPersonalityRatings(user.id, rateeId, ratings);
+      const updated = await storage.getPersonalityData(rateeId, user.id);
+      res.json({ success: true, ...updated });
+    } catch (error) {
+      console.error("Personality rate error:", error);
+      res.status(500).json({ error: "Failed to submit rating" });
     }
   });
 

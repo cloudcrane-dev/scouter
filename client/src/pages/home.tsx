@@ -3,9 +3,17 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Eye, Terminal, Shield, MessageSquare, Trophy } from "lucide-react";
+import { Search, Eye, Terminal, Shield, MessageSquare, Trophy, CheckCircle, Smile } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Student } from "@shared/schema";
+
+type LeaderboardEntry = Student & { verified?: boolean };
+type PersonalityEntry = {
+  id: number; name: string; email: string; rollNumber: string | null;
+  pictureUrl: string | null; searchCount: number; feedbackCount: number; profileStrength: number | null;
+  personalityScore: number; raterCount: number; verified: boolean;
+  topTraits: { trait: string; label: string; emoji: string; score: number }[];
+};
 
 function getInitials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -17,7 +25,7 @@ export default function HomePage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [limitHit, setLimitHit] = useState(false);
-  const [sortBy, setSortBy] = useState<"searches" | "feedback" | "strength">("strength");
+  const [sortBy, setSortBy] = useState<"searches" | "feedback" | "strength" | "personality">("strength");
   const [leaderboardLimit, setLeaderboardLimit] = useState(20);
   const [, navigate] = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -60,7 +68,7 @@ export default function HomePage() {
     refetchInterval: 60000,
   });
 
-  const { data: leaderboard, isLoading: leaderboardLoading } = useQuery<Student[]>({
+  const { data: leaderboard, isLoading: leaderboardLoading } = useQuery<(LeaderboardEntry | PersonalityEntry)[]>({
     queryKey: ["/api/leaderboard", `?sort=${sortBy}&limit=${leaderboardLimit}`],
   });
 
@@ -278,41 +286,21 @@ export default function HomePage() {
                   <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">top ranked</span>
                 </div>
                 <div className="flex items-center border border-white/8 overflow-hidden">
-                  <button
-                    onClick={() => { setSortBy("strength"); setLeaderboardLimit(20); }}
-                    data-testid="button-sort-strength"
-                    className={`flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer ${
-                      sortBy === "strength"
-                        ? "bg-foreground text-background"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    strength
-                  </button>
-                  <button
-                    onClick={() => { setSortBy("searches"); setLeaderboardLimit(20); }}
-                    data-testid="button-sort-searches"
-                    className={`flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer border-l border-white/8 ${
-                      sortBy === "searches"
-                        ? "bg-foreground text-background"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Eye className="w-2.5 h-2.5" />
-                    views
-                  </button>
-                  <button
-                    onClick={() => { setSortBy("feedback"); setLeaderboardLimit(20); }}
-                    data-testid="button-sort-feedback"
-                    className={`flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer border-l border-white/8 ${
-                      sortBy === "feedback"
-                        ? "bg-foreground text-background"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <MessageSquare className="w-2.5 h-2.5" />
-                    intel
-                  </button>
+                  {(["strength", "searches", "feedback", "personality"] as const).map((tab, i) => (
+                    <button
+                      key={tab}
+                      onClick={() => { setSortBy(tab); setLeaderboardLimit(20); }}
+                      data-testid={`button-sort-${tab}`}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer ${i > 0 ? "border-l border-white/8" : ""} ${
+                        sortBy === tab ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {tab === "searches" && <Eye className="w-2.5 h-2.5" />}
+                      {tab === "feedback" && <MessageSquare className="w-2.5 h-2.5" />}
+                      {tab === "personality" && <Smile className="w-2.5 h-2.5" />}
+                      {tab === "strength" ? "strength" : tab === "searches" ? "views" : tab === "feedback" ? "intel" : "vibe"}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -331,7 +319,10 @@ export default function HomePage() {
                     </div>
                   ))
                 ) : leaderboard && leaderboard.length > 0 ? (
-                  leaderboard.map((student, index) => (
+                  leaderboard.map((student, index) => {
+                    const pe = sortBy === "personality" ? (student as PersonalityEntry) : null;
+                    const le = sortBy !== "personality" ? (student as LeaderboardEntry) : null;
+                    return (
                     <motion.div
                       key={student.id}
                       data-testid={`card-leaderboard-${student.id}`}
@@ -365,11 +356,29 @@ export default function HomePage() {
                         {getInitials(student.name)}
                       </div>
                       <div className="flex-1 min-w-0 text-left">
-                        <p className="font-mono text-xs tracking-wide group-hover:text-foreground transition-colors duration-150 truncate">{student.name}</p>
-                        <p className="text-[10px] text-muted-foreground truncate font-mono">{student.rollNumber ?? student.email}</p>
+                        <div className="flex items-center gap-1">
+                          <p className="font-mono text-xs tracking-wide group-hover:text-foreground transition-colors duration-150 truncate">{student.name}</p>
+                          {(le?.verified || pe?.verified) && (
+                            <CheckCircle className="w-2.5 h-2.5 text-blue-400 shrink-0" title="Verified IITJ student" />
+                          )}
+                        </div>
+                        {pe ? (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {pe.topTraits.slice(0, 3).map(t => (
+                              <span key={t.trait} className="text-[9px] text-muted-foreground font-mono">{t.emoji} {t.label}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground truncate font-mono">{student.rollNumber ?? student.email}</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2.5 shrink-0 text-[10px] text-muted-foreground font-mono">
-                        {sortBy === "strength" && student.profileStrength != null ? (
+                        {pe ? (
+                          <span className="flex items-center gap-0.5 font-bold text-foreground tabular-nums text-xs">
+                            {pe.personalityScore}
+                            <span className="text-[8px] text-muted-foreground font-normal">/100</span>
+                          </span>
+                        ) : sortBy === "strength" && student.profileStrength != null ? (
                           <span className="flex items-center gap-0.5 font-bold text-foreground tabular-nums text-xs">
                             {student.profileStrength}
                             <span className="text-[8px] text-muted-foreground font-normal">/100</span>
@@ -388,7 +397,8 @@ export default function HomePage() {
                         )}
                       </div>
                     </motion.div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="p-8 text-center text-muted-foreground font-mono text-[11px]">
                     no data yet

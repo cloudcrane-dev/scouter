@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Eye, MessageSquare, Mail, Sparkles,
   Send, RefreshCw, User, Terminal, ShieldCheck, ExternalLink,
-  ThumbsUp, ThumbsDown, Check,
+  ThumbsUp, ThumbsDown, Check, Smile, Star,
 } from "lucide-react";
 import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Student } from "@shared/schema";
+import { PERSONALITY_TRAITS } from "@shared/schema";
 
 function getInitials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -172,6 +173,7 @@ export default function StudentPage() {
   const [userReaction, setUserReaction] = useState<"up" | "down" | null>(null);
   const [selectedChips, setSelectedChips] = useState<string[]>([]);
   const [chipSubmitted, setChipSubmitted] = useState(false);
+  const [pendingRatings, setPendingRatings] = useState<Record<string, number>>({});
   const analysisLoadedAtRef = useRef<number | null>(null);
   const currentCachedResponseIdRef = useRef<number | null>(null);
 
@@ -190,6 +192,29 @@ export default function StudentPage() {
   const { data: reactionSummary } = useQuery<{ up: number; down: number; chips: Record<string, number> }>({
     queryKey: ["/api/students", id.toString(), "reaction-summary"],
     enabled: id > 0,
+  });
+
+  type PersonalityTrait = { key: string; label: string; emoji: string; avgScore: number };
+  type PersonalityData = { traits: PersonalityTrait[]; totalScore: number; raterCount: number; myRating: Record<string, number> | null };
+  const { data: personalityData, refetch: refetchPersonality } = useQuery<PersonalityData>({
+    queryKey: ["/api/students", id.toString(), "personality"],
+    enabled: id > 0,
+  });
+
+  const personalityMutation = useMutation({
+    mutationFn: async (ratings: { trait: string; score: number }[]) => {
+      const res = await apiRequest("POST", `/api/students/${id}/personality-rate`, { ratings });
+      return res.json();
+    },
+    onSuccess: () => {
+      setPendingRatings({});
+      refetchPersonality();
+      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+      toast({ title: "vibe recorded", description: "personality ratings submitted." });
+    },
+    onError: (err: any) => {
+      toast({ title: "error", description: err?.message ?? "failed to submit ratings.", variant: "destructive" });
+    },
   });
 
   const viewedRef = useRef(false);
@@ -611,6 +636,103 @@ export default function StudentPage() {
             ) : null}
           </AnimatePresence>
         </motion.div>
+
+        {/* Personality rating section */}
+        {student.rollNumber !== "M25DE1021" && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="border border-white/8 bg-card p-5 mb-3"
+          data-testid="section-personality"
+        >
+          <div className="flex items-center gap-2 mb-4 font-mono">
+            <Smile className="w-3.5 h-3.5 text-foreground" />
+            <h2 className="font-semibold text-xs uppercase tracking-widest">personality</h2>
+            {personalityData && personalityData.raterCount >= 3 && (
+              <span className="ml-auto text-[10px] font-mono text-muted-foreground tabular-nums">
+                {personalityData.totalScore}/100 · {personalityData.raterCount} raters
+              </span>
+            )}
+          </div>
+
+          {/* Aggregate bars — visible if ≥3 raters */}
+          {personalityData && personalityData.raterCount >= 3 ? (
+            <div className="space-y-2 mb-4">
+              {personalityData.traits.filter(t => t.avgScore > 0).sort((a, b) => b.avgScore - a.avgScore).map(t => (
+                <div key={t.key} className="flex items-center gap-2" data-testid={`personality-bar-${t.key}`}>
+                  <span className="text-[10px] font-mono text-muted-foreground w-28 shrink-0">{t.emoji} {t.label}</span>
+                  <div className="flex-1 h-1 bg-white/8 overflow-hidden">
+                    <div
+                      className="h-full bg-foreground/60 transition-all duration-500"
+                      style={{ width: `${(t.avgScore / 5) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground/60 w-6 text-right tabular-nums">
+                    {t.avgScore.toFixed(1)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : personalityData && personalityData.raterCount > 0 ? (
+            <p className="text-[10px] font-mono text-muted-foreground/50 mb-4">
+              {personalityData.raterCount < 3 ? `${3 - personalityData.raterCount} more rating${3 - personalityData.raterCount === 1 ? "" : "s"} needed to reveal scores` : ""}
+            </p>
+          ) : null}
+
+          {/* Rating UI — auth only, non-self */}
+          {isAuthenticated && user?.studentId !== id ? (
+            (() => {
+              const myRating = personalityData?.myRating;
+              const activeRatings = Object.keys(pendingRatings).length > 0 ? pendingRatings : (myRating ?? {});
+              const hasChanges = Object.keys(pendingRatings).length > 0;
+              return (
+                <div className="space-y-2 pt-2 border-t border-white/8">
+                  <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-2">
+                    {myRating ? "// your rating (tap stars to update)" : "// rate their vibe (tap stars)"}
+                  </p>
+                  {PERSONALITY_TRAITS.map(t => {
+                    const current = activeRatings[t.key] ?? 0;
+                    return (
+                      <div key={t.key} className="flex items-center gap-2" data-testid={`rate-trait-${t.key}`}>
+                        <span className="text-[10px] font-mono text-muted-foreground w-28 shrink-0">{t.emoji} {t.label}</span>
+                        <div className="flex gap-0.5">
+                          {[1, 2, 3, 4, 5].map(star => (
+                            <button
+                              key={star}
+                              onClick={() => setPendingRatings(prev => ({ ...prev, [t.key]: star === current ? 0 : star }))}
+                              data-testid={`star-${t.key}-${star}`}
+                              className={`w-4 h-4 transition-colors duration-100 cursor-pointer ${star <= current ? "text-yellow-400" : "text-white/15 hover:text-white/40"}`}
+                            >
+                              <Star className="w-3.5 h-3.5" fill={star <= current ? "currentColor" : "none"} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {hasChanges && (
+                    <button
+                      onClick={() => personalityMutation.mutate(
+                        Object.entries(pendingRatings).filter(([, v]) => v > 0).map(([trait, score]) => ({ trait, score }))
+                      )}
+                      disabled={personalityMutation.isPending || Object.values(pendingRatings).every(v => v === 0)}
+                      data-testid="button-submit-personality"
+                      className="mt-2 text-[10px] font-mono px-3 py-1.5 border border-white/15 text-muted-foreground hover:text-foreground hover:border-white/30 transition-all disabled:opacity-40"
+                    >
+                      {personalityMutation.isPending ? "saving..." : "submit rating"}
+                    </button>
+                  )}
+                </div>
+              );
+            })()
+          ) : !isAuthenticated ? (
+            <p className="text-[10px] font-mono text-muted-foreground/40 pt-2 border-t border-white/8">
+              sign in to rate this person's vibe
+            </p>
+          ) : null}
+        </motion.div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 16 }}
