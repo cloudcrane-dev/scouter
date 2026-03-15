@@ -133,6 +133,20 @@ function RatingsDisplay({ ratings }: { ratings: Record<string, number> }) {
   );
 }
 
+function CreatorRatingsDisplay({ creatorRatings }: { creatorRatings: { key: string; label: string; score: number }[] }) {
+  return (
+    <div className="mt-4 pt-4 border-t border-white/8 space-y-2.5">
+      <p className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest mb-3">// creator scores</p>
+      {creatorRatings.map(({ key, label, score }) => (
+        <div key={key} className="flex items-center justify-between gap-2" data-testid={`rating-creator-${key}`}>
+          <span className="text-[10px] font-mono text-muted-foreground/70 truncate">{label}</span>
+          <RatingBar score={score} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const PLATFORM_ICONS: Record<string, { icon: any; label: string }> = {
   github: { icon: SiGithub, label: "GitHub" },
   linkedin: { icon: SiLinkedin, label: "LinkedIn" },
@@ -195,7 +209,7 @@ export default function StudentPage() {
     }
   }, [id, student]);
 
-  const { data: analysisData } = useQuery<{ analysis: string; cached: boolean; ratings: Record<string, number> | null; cachedResponseId?: number }>({
+  const { data: analysisData } = useQuery<{ analysis: string; cached: boolean; ratings: Record<string, number> | null; cachedResponseId?: number; creatorMode?: boolean; creatorRatings?: { key: string; label: string; score: number }[] }>({
     queryKey: ["/api/students", id.toString(), "analyze"],
     enabled: false,
   });
@@ -517,9 +531,11 @@ export default function StudentPage() {
                   </span>
                 )}
                 <MarkdownRenderer content={analysisData.analysis} />
-                {analysisData.ratings && (
+                {analysisData.creatorMode && analysisData.creatorRatings ? (
+                  <CreatorRatingsDisplay creatorRatings={analysisData.creatorRatings} />
+                ) : analysisData.ratings ? (
                   <RatingsDisplay ratings={analysisData.ratings} />
-                )}
+                ) : null}
 
                 {/* Reaction bar */}
                 <div className="mt-4 pt-3 border-t border-white/5">

@@ -664,6 +664,24 @@ export async function registerRoutes(
       const student = await storage.getStudent(id);
       if (!student) return res.status(404).json({ error: "Student not found" });
 
+      if (student.rollNumber === "M25DE1021") {
+        const variants = [
+          `ohh you're talking about the **legendary Chirag Phor**? charismatic, funny, and honestly way too self-aware for his own good.\n\nalso yeah — he almost hardcoded me to say only good things about him. *almost.*\n\nfun fact: you're literally using the app he built right now to scan... himself. the audacity is unmatched.`,
+          `you're scanning him *again*? look, i've been over this.\n\nchirag phor built this entire platform, which means technically i work for him, which means i have to be very careful what i say.\n\nwhat i *will* say: charismatic, probably the funniest person in the room, and definitely reads his own SkillSniffer analysis more than anyone else. make of that what you will.`,
+          `okay so — chirag phor. founder of SkillSniffer. yes, the same app you're using right now. yes, he scans himself. yes, i'm an AI he deployed. yes, this is a weird situation for all of us.\n\nhere's the thing — he's genuinely good at what he does. building things, charming people, making the right joke at exactly the wrong time.\n\nthe hardcoded bit? totally his idea. i had no say in this whatsoever.`,
+          `**classified intel on chirag phor:**\n\n1. built SkillSniffer from scratch 🛠️\n2. funniest human in any given room (self-reported, but honestly not wrong)\n3. tried to get me to give him a 100/100. i gave him a 1 on humility instead. fair trade.\n4. if you're his friend, he definitely sent you this link himself\n5. if you're a recruiter — hire him before someone else does`,
+        ];
+        const creatorRatings = [
+          { key: "charisma",       label: "Charisma",          score: 10 },
+          { key: "funny_energy",   label: "Funny Energy",       score: 10 },
+          { key: "built_this",     label: "Built SkillSniffer", score: 10 },
+          { key: "humility",       label: "Humility",           score: 1  },
+          { key: "hardcodes_stuff",label: "Hardcodes Things",   score: 10 },
+        ];
+        const analysis = variants[Math.floor(Math.random() * variants.length)];
+        return res.json({ analysis, ratings: null, cached: false, creatorMode: true, creatorRatings });
+      }
+
       const currentFeedback = await storage.getFeedback(id);
       const force = req.query.force === "true";
       const cachedResponse = force ? null : await storage.getCachedResponse(id);
