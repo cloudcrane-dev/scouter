@@ -537,7 +537,8 @@ export default function StudentPage() {
                   <RatingsDisplay ratings={analysisData.ratings} />
                 ) : null}
 
-                {/* Reaction bar */}
+                {/* Reaction bar — hidden for creator easter egg (no cachedResponseId) */}
+                {!analysisData.creatorMode && (
                 <div className="mt-4 pt-3 border-t border-white/5">
                   {!userReaction ? (
                     <div className="flex items-center gap-3">
@@ -605,6 +606,7 @@ export default function StudentPage() {
                     </motion.div>
                   )}
                 </div>
+                )}
               </motion.div>
             ) : null}
           </AnimatePresence>
