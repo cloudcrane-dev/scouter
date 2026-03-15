@@ -290,7 +290,8 @@ async function generateAIAnalysis(
   webContext: string,
   feedbackContext: string,
   socialLinksContent: string,
-  priorReactionContext?: string
+  priorReactionContext?: string,
+  socialPerceptionContext?: string
 ): Promise<{ text: string; ratingsJson: string }> {
   const hasSocialContent = !!socialLinksContent.trim();
 
@@ -328,6 +329,13 @@ Make suggestions specific to their branch and year — a 2nd year CS student nee
 
 If peer feedback exists, weave the most relevant insight naturally into Strengths or Improvement Areas — don't create a separate section for it.
 
+## Social Perception
+If personality trait ratings or profile view data is provided, add this section. Cover:
+- How peers perceive this student based on trait ratings (mention specific traits and scores). If trait scores are high (4+), highlight them as social strengths. If low, note them diplomatically.
+- What the profile view count says about their visibility/popularity on campus.
+- If no trait ratings exist yet, mention that peers haven't rated them yet and encourage building connections.
+Keep this section 2–4 bullet points. Be insightful, not just a data dump — interpret what the numbers mean socially.
+
 End with one line:
 **Verdict:** <one honest, direct sentence summarising where they stand and the single most important thing to do next>
 
@@ -360,6 +368,10 @@ ${webContext || "No web results found — student has minimal or no public web p
   }
 
   userPrompt += `\n\n**Peer feedback (submitted anonymously by others):**\n${feedbackContext || "No peer feedback yet."}`;
+
+  if (socialPerceptionContext) {
+    userPrompt += `\n\n**Social perception data (from SkillSniffer platform):**\n${socialPerceptionContext}`;
+  }
 
   const response = await openai.chat.completions.create({
     model: "gpt-5.2",
@@ -694,9 +706,10 @@ export async function registerRoutes(
 
       const socialLinksData = await storage.getSocialLinks(id);
 
-      const [webContext, socialLinksContent] = await Promise.all([
+      const [webContext, socialLinksContent, personalityData] = await Promise.all([
         gatherWebContext(student.name, student.email, student.rollNumber),
         gatherSocialLinksContent(socialLinksData),
+        storage.getPersonalityData(id),
       ]);
 
       if (socialLinksContent) {
@@ -711,12 +724,21 @@ export async function registerRoutes(
 
       const priorReactionContext = await storage.getPriorReactionContext(id);
 
+      let socialPerceptionContext = "";
+      const ratedTraits = personalityData.traits.filter(t => t.avgScore > 0);
+      if (ratedTraits.length > 0) {
+        socialPerceptionContext += `Personality trait ratings (scored 1-5 by peers, ${personalityData.raterCount} rater${personalityData.raterCount !== 1 ? "s" : ""}):\n`;
+        socialPerceptionContext += ratedTraits.map(t => `- ${t.label} (${t.emoji}): ${t.avgScore.toFixed(1)}/5`).join("\n");
+      }
+      socialPerceptionContext += `\nProfile views: ${student.searchCount} (number of times people have looked up this student on SkillSniffer)`;
+
       const { text: analysis, ratingsJson } = await generateAIAnalysis(
         { name: student.name, email: student.email, rollNumber: student.rollNumber },
         webContext,
         feedbackContext,
         socialLinksContent,
-        priorReactionContext || undefined
+        priorReactionContext || undefined,
+        socialPerceptionContext
       );
 
       const saved = await storage.saveCachedResponse(id, analysis, student.feedbackCount, ratingsJson);
