@@ -403,15 +403,16 @@ export class DatabaseStorage implements IStorage {
   async getPersonalityLeaderboard(limit = 20, traitFilter?: string): Promise<PersonalityEntry[]> {
     const validTrait = traitFilter && PERSONALITY_TRAITS.some(t => t.key === traitFilter) ? traitFilter : undefined;
 
-    const whereClause = validTrait ? eq(personalityRatings.trait, validTrait) : undefined;
-    const rows = await db.select({
+    const baseQuery = db.select({
       rateeId: personalityRatings.rateeId,
       trait: personalityRatings.trait,
       avgScore: sql<number>`AVG(${personalityRatings.score})`,
       raterCount: sql<number>`COUNT(DISTINCT ${personalityRatings.raterId})`,
-    }).from(personalityRatings)
-      .where(whereClause as any)
-      .groupBy(personalityRatings.rateeId, personalityRatings.trait);
+    }).from(personalityRatings);
+
+    const rows = validTrait
+      ? await baseQuery.where(eq(personalityRatings.trait, validTrait)).groupBy(personalityRatings.rateeId, personalityRatings.trait)
+      : await baseQuery.groupBy(personalityRatings.rateeId, personalityRatings.trait);
 
     const byStudent: Record<number, { traits: Record<string, number>; raterCount: number }> = {};
     for (const row of rows) {
