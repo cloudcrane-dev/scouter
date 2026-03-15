@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { cachedResponses, students } from "@shared/schema";
-import { eq, isNotNull, sql } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import { computeProfileStrength } from "./storage";
 
 async function migrateRatingsTo10Scale() {
@@ -24,11 +24,12 @@ async function migrateRatingsTo10Scale() {
         doubled[k] = Math.min(10, (parsed[k] ?? 1) * 2);
       }
 
+      const strength = computeProfileStrength(doubled);
+
       await db.update(cachedResponses)
         .set({ ratings: JSON.stringify(doubled) })
         .where(eq(cachedResponses.id, row.id));
 
-      const strength = computeProfileStrength(doubled);
       await db.update(students)
         .set({ profileStrength: strength })
         .where(eq(students.id, row.studentId));
@@ -41,10 +42,7 @@ async function migrateRatingsTo10Scale() {
   console.log(`Backfilled ${backfilled} cached ratings (1-5 → 1-10)`);
 
   const deleted = await db.delete(cachedResponses).returning();
-  console.log(`Invalidated ${deleted.length} cached responses`);
-
-  await db.update(students).set({ profileStrength: null });
-  console.log("Cleared all profileStrength values (will recompute on next scan)");
+  console.log(`Invalidated ${deleted.length} stale cached responses (will regenerate with 1-10 scale on next scan)`);
 }
 
 migrateRatingsTo10Scale()

@@ -183,7 +183,7 @@ export default function StudentPage() {
   });
 
   const analyzeMutation = useMutation({
-    mutationFn: async (force = false) => {
+    mutationFn: async (force: boolean = false) => {
       const url = force ? `/api/students/${id}/analyze?force=true` : `/api/students/${id}/analyze`;
       const res = await apiRequest("POST", url);
       return res.json();
