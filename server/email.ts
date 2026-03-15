@@ -116,6 +116,65 @@ export async function sendInsightNotification(opts: {
   });
 }
 
+export async function sendPersonalityRatingNotification(opts: {
+  toEmail: string;
+  studentName: string;
+  studentId: number;
+}): Promise<void> {
+  const { apiKey, fromEmail } = await getCredentials();
+  const resend = new Resend(apiKey);
+  const appUrl = process.env.APP_URL || "https://skillsniffer.in";
+  const profileUrl = `${appUrl}/student/${opts.studentId}`;
+  const loginUrl = `${appUrl}/auth/google`;
+  const firstName = opts.studentName.split(" ")[0];
+
+  const html = baseHtml("Someone just rated your vibe ✨", `
+    <tr>
+      <td style="padding:24px 28px 16px;">
+        <p style="margin:0;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:#888;">skillsniffer.in</p>
+        <h1 style="margin:10px 0 0;font-size:17px;font-weight:700;letter-spacing:-0.02em;color:#f5f5f5;">
+          someone just rated your vibe ✨
+        </h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px 20px;">
+        <p style="margin:0;font-size:13px;line-height:1.65;color:#aaa;">Hey ${firstName},</p>
+        <p style="margin:12px 0 0;font-size:13px;line-height:1.65;color:#aaa;">
+          A batchmate just rated your personality traits on SkillSniffer.
+          Your vibe scores just got updated — log in to see how people perceive you.
+        </p>
+        <p style="margin:12px 0 0;font-size:13px;line-height:1.65;color:#aaa;">
+          Traits like <strong style="color:#e5e5e5;">Looks, Brains, Fitness, Funny, Charm</strong> and <strong style="color:#e5e5e5;">Romantic</strong>
+          — all scored anonymously by your peers. 👀
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 28px 28px;">
+        <a href="${loginUrl}" style="display:inline-block;padding:10px 22px;background:#f5f5f5;color:#111;font-size:11px;font-family:'Courier New',Courier,monospace;letter-spacing:0.1em;text-transform:uppercase;text-decoration:none;font-weight:700;">
+          see your ratings →
+        </a>
+        <p style="margin:16px 0 0;font-size:11px;color:#555;">
+          View your profile: <a href="${profileUrl}" style="color:#888;text-decoration:underline;">${profileUrl}</a>
+        </p>
+      </td>
+    </tr>
+  `);
+
+  await resend.emails.send({
+    from: fromEmail,
+    to: opts.toEmail,
+    subject: `Someone just rated your vibe on SkillSniffer ✨`,
+    html,
+  });
+}
+
+export function getDayKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
 export async function sendTopStrengthEmail(opts: {
   toEmail: string;
   studentName: string;

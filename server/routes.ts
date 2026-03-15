@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { sendInsightNotification } from "./email";
+import { sendInsightNotification, sendPersonalityRatingNotification, getDayKey } from "./email";
 import { sendRankEmails } from "./rankEmails";
 import OpenAI from "openai";
 import passport from "passport";
@@ -952,6 +952,17 @@ export async function registerRoutes(
       await storage.submitPersonalityRatings(user.id, rateeId, ratings);
       const updated = await storage.getPersonalityData(rateeId, user.id);
       res.json({ success: true, ...updated });
+
+      const student = await storage.getStudent(rateeId);
+      if (student?.email?.endsWith("@iitj.ac.in")) {
+        const dayKey = getDayKey();
+        const alreadySent = await storage.hasEmailBeenSent(rateeId, "personality_rating", dayKey);
+        if (!alreadySent) {
+          sendPersonalityRatingNotification({ toEmail: student.email, studentName: student.name, studentId: student.id })
+            .then(() => storage.recordEmailSent(rateeId, "personality_rating", dayKey))
+            .catch(e => console.error("Rating notification email failed:", e));
+        }
+      }
     } catch (error) {
       console.error("Personality rate error:", error);
       res.status(500).json({ error: "Failed to submit rating" });

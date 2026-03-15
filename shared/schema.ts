@@ -144,14 +144,12 @@ export type AnalysisReaction = typeof analysisReactions.$inferSelect;
 export type PersonalityRating = typeof personalityRatings.$inferSelect;
 
 export const PERSONALITY_TRAITS = [
-  { key: "funny",           label: "Funny",           emoji: "😂" },
-  { key: "charming",        label: "Charming",         emoji: "✨" },
-  { key: "charismatic",     label: "Charismatic",      emoji: "⚡" },
-  { key: "empathetic",      label: "Empathetic",       emoji: "💙" },
-  { key: "arrogant",        label: "Arrogant",         emoji: "😤" },
-  { key: "mysterious",      label: "Mysterious",       emoji: "🌙" },
-  { key: "intense",         label: "Intense",          emoji: "🔥" },
-  { key: "brutally_honest", label: "Brutally Honest",  emoji: "🎯" },
+  { key: "looks",    label: "Looks",    emoji: "😍" },
+  { key: "brains",   label: "Brains",   emoji: "🧠" },
+  { key: "fitness",  label: "Fitness",  emoji: "💪" },
+  { key: "funny",    label: "Funny",    emoji: "😂" },
+  { key: "charm",    label: "Charm",    emoji: "✨" },
+  { key: "romantic", label: "Romantic", emoji: "💘" },
 ] as const;
 
 export type PersonalityTraitKey = typeof PERSONALITY_TRAITS[number]["key"];
