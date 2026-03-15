@@ -1,9 +1,10 @@
 import {
-  students, feedback, cachedResponses, users, socialLinks, analyticsEvents,
+  students, feedback, cachedResponses, users, socialLinks, analyticsEvents, analysisReactions,
   type Student, type InsertStudent,
   type Feedback, type InsertFeedback,
   type CachedResponse,
   type User, type SocialLink, type InsertSocialLink,
+  type AnalysisReaction,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, ilike, or, desc, sql, and } from "drizzle-orm";
@@ -62,6 +63,10 @@ export interface IStorage {
   getDailyActiveUsers(): Promise<number>;
   getMonthlyActiveUsers(): Promise<number>;
   getVerifiedActiveUsers(): Promise<number>;
+
+  addAnalysisReaction(data: { cachedResponseId: number; studentId: number; reaction: string; chips?: string[] | null; implicit?: string | null }): Promise<AnalysisReaction>;
+  getReactionSummary(studentId: number): Promise<{ up: number; down: number; chips: Record<string, number>; latestChips: string[] }>;
+  getPriorReactionContext(studentId: number): Promise<string>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -241,6 +246,65 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .where(sql`${users.studentId} IS NOT NULL`);
     return Number(result[0]?.count ?? 0);
+  }
+
+  async addAnalysisReaction(data: {
+    cachedResponseId: number;
+    studentId: number;
+    reaction: string;
+    chips?: string[] | null;
+    implicit?: string | null;
+  }): Promise<AnalysisReaction> {
+    const [created] = await db.insert(analysisReactions).values({
+      cachedResponseId: data.cachedResponseId,
+      studentId: data.studentId,
+      reaction: data.reaction,
+      chips: data.chips ?? null,
+      implicit: data.implicit ?? null,
+    }).returning();
+    return created;
+  }
+
+  async getReactionSummary(studentId: number): Promise<{ up: number; down: number; chips: Record<string, number>; latestChips: string[] }> {
+    const rows = await db.select().from(analysisReactions)
+      .where(and(eq(analysisReactions.studentId, studentId), sql`${analysisReactions.implicit} IS NULL`))
+      .orderBy(desc(analysisReactions.createdAt));
+
+    let up = 0, down = 0;
+    const chips: Record<string, number> = {};
+    let latestChips: string[] = [];
+
+    for (const row of rows) {
+      if (row.reaction === "up") up++;
+      else if (row.reaction === "down") {
+        down++;
+        if (row.chips) {
+          for (const c of row.chips) chips[c] = (chips[c] ?? 0) + 1;
+          if (latestChips.length === 0) latestChips = row.chips;
+        }
+      }
+    }
+    return { up, down, chips, latestChips };
+  }
+
+  async getPriorReactionContext(studentId: number): Promise<string> {
+    const { down, chips } = await this.getReactionSummary(studentId);
+    if (down === 0 && Object.keys(chips).length === 0) return "";
+
+    const lines: string[] = [];
+    if (chips["too_vague"] >= 1) {
+      lines.push("IMPORTANT: Previous analyses for this student were flagged as 'too vague'. Be hyper-specific — cite exact repo names, commit counts, LeetCode problem counts, job titles, project names. Never use filler phrases like 'seems active' without data.");
+    }
+    if (chips["wrong_person"] >= 1) {
+      lines.push("CRITICAL: A previous analysis was flagged as 'wrong person' — the AI confused this student with someone else. You MUST anchor every single claim to this student's exact name, roll number, or @iitj.ac.in email. If you can't verify a fact belongs to them specifically, omit it entirely.");
+    }
+    if (chips["outdated"] >= 1) {
+      lines.push("NOTE: Previous analyses were flagged as 'outdated'. Prioritise the most recent web results and social data. Note when something was last updated or when information appears stale.");
+    }
+    if (chips["missing_info"] >= 1) {
+      lines.push("NOTE: Previous analyses were flagged as 'missing info'. Explicitly state what data was and wasn't found rather than omitting gaps. If a platform has no data, call it out directly in Improvement Areas.");
+    }
+    return lines.join("\n");
   }
 }
 

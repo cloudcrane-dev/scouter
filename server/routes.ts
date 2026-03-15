@@ -288,7 +288,8 @@ async function generateAIAnalysis(
   student: { name: string; email?: string | null; rollNumber?: string | null },
   webContext: string,
   feedbackContext: string,
-  socialLinksContent: string
+  socialLinksContent: string,
+  priorReactionContext?: string
 ): Promise<{ text: string; ratingsJson: string }> {
   const hasSocialContent = !!socialLinksContent.trim();
 
@@ -298,7 +299,7 @@ STUDENT CONTEXT:
 - This student is confirmed at IIT Jodhpur. Name, roll number, and @iitj.ac.in email are verified.
 - Decode the roll number: B24CS = B.Tech 2024 Computer Science, M25LDS = M.Des 2025 Design, B23ME = B.Tech 2023 Mechanical, PHD = PhD student. Always state their program and graduation year.
 - Prefixes: B=B.Tech, M=M.Tech/M.Des/MSc, PHD=PhD. Departments: CS, EE, ME, AI, LDS=Design, BS=Bioscience, CE=Civil, CH=Chemical, MA=Math, PH=Physics, MT=Metallurgy, etc.
-
+${priorReactionContext ? `\nFEEDBACK FROM PREVIOUS ANALYSES (users flagged issues — act on these):\n${priorReactionContext}\n` : ""}
 DATA RULES:
 - IGNORE web results clearly about a different person at another institution.
 - ONLY use results mentioning IIT Jodhpur, iitj.ac.in, or matching the student's roll/email.
@@ -669,7 +670,7 @@ export async function registerRoutes(
       if (cachedResponse && cachedResponse.feedbackCountAtGeneration === student.feedbackCount) {
         let ratings: Record<string, number> | null = null;
         try { if (cachedResponse.ratings) ratings = JSON.parse(cachedResponse.ratings); } catch { ratings = null; }
-        return res.json({ analysis: cachedResponse.response, ratings, cached: true });
+        return res.json({ analysis: cachedResponse.response, ratings, cached: true, cachedResponseId: cachedResponse.id });
       }
 
       const socialLinksData = await storage.getSocialLinks(id);
@@ -689,22 +690,65 @@ export async function registerRoutes(
           ).join("\n")
         : "";
 
+      const priorReactionContext = await storage.getPriorReactionContext(id);
+
       const { text: analysis, ratingsJson } = await generateAIAnalysis(
         { name: student.name, email: student.email, rollNumber: student.rollNumber },
         webContext,
         feedbackContext,
-        socialLinksContent
+        socialLinksContent,
+        priorReactionContext || undefined
       );
 
-      await storage.saveCachedResponse(id, analysis, student.feedbackCount, ratingsJson);
+      const saved = await storage.saveCachedResponse(id, analysis, student.feedbackCount, ratingsJson);
 
       let ratings: Record<string, number> | null = null;
       try { ratings = JSON.parse(ratingsJson); } catch { ratings = null; }
 
-      res.json({ analysis, ratings, cached: false });
+      res.json({ analysis, ratings, cached: false, cachedResponseId: saved.id });
     } catch (error) {
       console.error("Analysis error:", error);
       res.status(500).json({ error: "Failed to generate analysis" });
+    }
+  });
+
+  app.post("/api/cached-responses/:id/react", async (req, res) => {
+    try {
+      const cachedResponseId = parseInt(req.params.id);
+      if (isNaN(cachedResponseId)) return res.status(400).json({ error: "Invalid ID" });
+
+      const { reaction, chips, studentId, implicit } = req.body;
+      if (!studentId || isNaN(parseInt(studentId))) return res.status(400).json({ error: "studentId required" });
+      if (!reaction || !["up", "down", "rescan"].includes(reaction)) {
+        return res.status(400).json({ error: "reaction must be up, down, or rescan" });
+      }
+
+      const chipValues = ["too_vague", "wrong_person", "outdated", "missing_info"];
+      const validChips = Array.isArray(chips) ? chips.filter((c: string) => chipValues.includes(c)) : null;
+
+      const result = await storage.addAnalysisReaction({
+        cachedResponseId,
+        studentId: parseInt(studentId),
+        reaction,
+        chips: validChips?.length ? validChips : null,
+        implicit: implicit || null,
+      });
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Reaction error:", error);
+      res.status(500).json({ error: "Failed to save reaction" });
+    }
+  });
+
+  app.get("/api/students/:id/reaction-summary", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const summary = await storage.getReactionSummary(id);
+      res.json(summary);
+    } catch (error) {
+      console.error("Reaction summary error:", error);
+      res.status(500).json({ error: "Failed to get reaction summary" });
     }
   });
 

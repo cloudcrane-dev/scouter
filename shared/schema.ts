@@ -58,6 +58,16 @@ export const analyticsEvents = pgTable("analytics_events", {
   date: text("date").notNull(),
 }, (t) => [unique().on(t.ipHash, t.date)]);
 
+export const analysisReactions = pgTable("analysis_reactions", {
+  id: serial("id").primaryKey(),
+  cachedResponseId: integer("cached_response_id").notNull().references(() => cachedResponses.id, { onDelete: "cascade" }),
+  studentId: integer("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  reaction: text("reaction").notNull(),
+  chips: text("chips").array(),
+  implicit: text("implicit"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const studentsRelations = relations(students, ({ many }) => ({
   feedback: many(feedback),
   cachedResponses: many(cachedResponses),
@@ -78,6 +88,11 @@ export const feedbackRelations = relations(feedback, ({ one }) => ({
 
 export const cachedResponsesRelations = relations(cachedResponses, ({ one }) => ({
   student: one(students, { fields: [cachedResponses.studentId], references: [students.id] }),
+}));
+
+export const analysisReactionsRelations = relations(analysisReactions, ({ one }) => ({
+  cachedResponse: one(cachedResponses, { fields: [analysisReactions.cachedResponseId], references: [cachedResponses.id] }),
+  student: one(students, { fields: [analysisReactions.studentId], references: [students.id] }),
 }));
 
 export const insertStudentSchema = createInsertSchema(students).omit({
@@ -103,3 +118,4 @@ export type CachedResponse = typeof cachedResponses.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type SocialLink = typeof socialLinks.$inferSelect;
 export type InsertSocialLink = z.infer<typeof insertSocialLinkSchema>;
+export type AnalysisReaction = typeof analysisReactions.$inferSelect;

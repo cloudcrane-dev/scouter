@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Eye, MessageSquare, Mail, Sparkles,
   Send, RefreshCw, User, Terminal, ShieldCheck, ExternalLink,
+  ThumbsUp, ThumbsDown, Check,
 } from "lucide-react";
 import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -154,9 +155,26 @@ export default function StudentPage() {
   const { toast } = useToast();
   const { isAuthenticated, user } = useAuth();
   const [feedbackContent, setFeedbackContent] = useState("");
+  const [userReaction, setUserReaction] = useState<"up" | "down" | null>(null);
+  const [selectedChips, setSelectedChips] = useState<string[]>([]);
+  const [chipSubmitted, setChipSubmitted] = useState(false);
+  const analysisLoadedAtRef = useRef<number | null>(null);
+  const currentCachedResponseIdRef = useRef<number | null>(null);
+
+  const CHIPS = [
+    { key: "too_vague", label: "too vague" },
+    { key: "wrong_person", label: "wrong person" },
+    { key: "outdated", label: "outdated" },
+    { key: "missing_info", label: "missing info" },
+  ];
 
   const { data: student, isLoading: studentLoading } = useQuery<StudentWithLinks>({
     queryKey: ["/api/students", id.toString()],
+    enabled: id > 0,
+  });
+
+  const { data: reactionSummary } = useQuery<{ up: number; down: number; chips: Record<string, number> }>({
+    queryKey: ["/api/students", id.toString(), "reaction-summary"],
     enabled: id > 0,
   });
 
@@ -177,9 +195,26 @@ export default function StudentPage() {
     }
   }, [id, student]);
 
-  const { data: analysisData } = useQuery<{ analysis: string; cached: boolean; ratings: Record<string, number> | null }>({
+  const { data: analysisData } = useQuery<{ analysis: string; cached: boolean; ratings: Record<string, number> | null; cachedResponseId?: number }>({
     queryKey: ["/api/students", id.toString(), "analyze"],
     enabled: false,
+  });
+
+  const reactionMutation = useMutation({
+    mutationFn: async ({ reaction, chips, implicit }: { reaction: string; chips?: string[]; implicit?: string }) => {
+      const crid = currentCachedResponseIdRef.current;
+      if (!crid) throw new Error("No analysis to react to");
+      const res = await apiRequest("POST", `/api/cached-responses/${crid}/react`, {
+        reaction,
+        chips: chips ?? null,
+        studentId: id,
+        implicit: implicit ?? null,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString(), "reaction-summary"] });
+    },
   });
 
   const analyzeMutation = useMutation({
@@ -191,6 +226,11 @@ export default function StudentPage() {
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/students", id.toString(), "analyze"], data);
       queryClient.invalidateQueries({ queryKey: ["/api/search-limit"] });
+      analysisLoadedAtRef.current = Date.now();
+      if (data.cachedResponseId) currentCachedResponseIdRef.current = data.cachedResponseId;
+      setUserReaction(null);
+      setSelectedChips([]);
+      setChipSubmitted(false);
     },
     onError: (error: any) => {
       const msg = error?.message?.includes("429")
@@ -199,6 +239,36 @@ export default function StudentPage() {
       toast({ title: "error", description: msg, variant: "destructive" });
     },
   });
+
+  function handleRescan() {
+    const loadedAt = analysisLoadedAtRef.current;
+    const crid = currentCachedResponseIdRef.current;
+    if (loadedAt && crid && Date.now() - loadedAt < 30_000) {
+      reactionMutation.mutate({ reaction: "rescan", implicit: "quick_rescan" });
+    }
+    analyzeMutation.mutate(true);
+  }
+
+  function handleReaction(r: "up" | "down") {
+    if (userReaction === r) return;
+    setUserReaction(r);
+    setSelectedChips([]);
+    setChipSubmitted(false);
+    if (r === "up") {
+      reactionMutation.mutate({ reaction: "up" });
+    }
+  }
+
+  function toggleChip(chip: string) {
+    setSelectedChips(prev =>
+      prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip]
+    );
+  }
+
+  function submitChips() {
+    reactionMutation.mutate({ reaction: "down", chips: selectedChips });
+    setChipSubmitted(true);
+  }
 
   const feedbackMutation = useMutation({
     mutationFn: async () => {
@@ -413,7 +483,7 @@ export default function StudentPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => analyzeMutation.mutate(true)}
+                onClick={handleRescan}
                 disabled={analyzeMutation.isPending}
                 data-testid="button-refresh-analysis"
                 className="text-[10px] text-muted-foreground rounded-none font-mono"
@@ -450,6 +520,75 @@ export default function StudentPage() {
                 {analysisData.ratings && (
                   <RatingsDisplay ratings={analysisData.ratings} />
                 )}
+
+                {/* Reaction bar */}
+                <div className="mt-4 pt-3 border-t border-white/5">
+                  {!userReaction ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-muted-foreground/50 font-mono">was this accurate?</span>
+                      <button
+                        onClick={() => handleReaction("up")}
+                        data-testid="button-reaction-up"
+                        className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-green-400 transition-colors px-2 py-1 border border-white/8 hover:border-green-400/30"
+                      >
+                        <ThumbsUp className="w-3 h-3" />
+                        <span>yes</span>
+                        {reactionSummary && reactionSummary.up > 0 && (
+                          <span className="text-muted-foreground/40 ml-0.5">{reactionSummary.up}</span>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => handleReaction("down")}
+                        data-testid="button-reaction-down"
+                        className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-red-400 transition-colors px-2 py-1 border border-white/8 hover:border-red-400/30"
+                      >
+                        <ThumbsDown className="w-3 h-3" />
+                        <span>no</span>
+                        {reactionSummary && reactionSummary.down > 0 && (
+                          <span className="text-muted-foreground/40 ml-0.5">{reactionSummary.down}</span>
+                        )}
+                      </button>
+                    </div>
+                  ) : userReaction === "up" ? (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 text-[10px] font-mono text-green-400/70">
+                      <Check className="w-3 h-3" />
+                      <span>thanks — helps improve future analyses</span>
+                    </motion.div>
+                  ) : chipSubmitted ? (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/60">
+                      <Check className="w-3 h-3" />
+                      <span>feedback noted — next rescan will address this</span>
+                    </motion.div>
+                  ) : (
+                    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+                      <p className="text-[10px] font-mono text-muted-foreground/60">what was wrong?</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {CHIPS.map(chip => (
+                          <button
+                            key={chip.key}
+                            onClick={() => toggleChip(chip.key)}
+                            data-testid={`chip-${chip.key}`}
+                            className={`text-[10px] font-mono px-2 py-1 border transition-all duration-150 ${
+                              selectedChips.includes(chip.key)
+                                ? "border-foreground/40 text-foreground bg-white/5"
+                                : "border-white/10 text-muted-foreground hover:border-white/25"
+                            }`}
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={submitChips}
+                        disabled={reactionMutation.isPending}
+                        data-testid="button-submit-chips"
+                        className="text-[10px] font-mono text-muted-foreground/50 hover:text-muted-foreground transition-colors border border-white/8 px-2 py-1"
+                      >
+                        {reactionMutation.isPending ? "saving..." : selectedChips.length ? "submit" : "skip"}
+                      </button>
+                    </motion.div>
+                  )}
+                </div>
               </motion.div>
             ) : null}
           </AnimatePresence>
