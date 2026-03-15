@@ -1,5 +1,5 @@
 import {
-  students, feedback, cachedResponses, users, socialLinks, analyticsEvents, analysisReactions,
+  students, feedback, cachedResponses, users, socialLinks, analyticsEvents, analysisReactions, emailNotifications,
   type Student, type InsertStudent,
   type Feedback, type InsertFeedback,
   type CachedResponse,
@@ -67,6 +67,10 @@ export interface IStorage {
   addAnalysisReaction(data: { cachedResponseId: number; studentId: number; reaction: string; chips?: string[] | null; implicit?: string | null }): Promise<AnalysisReaction>;
   getReactionSummary(studentId: number): Promise<{ up: number; down: number; chips: Record<string, number>; latestChips: string[] }>;
   getPriorReactionContext(studentId: number): Promise<string>;
+
+  getBottomStrengthStudents(limit?: number): Promise<Student[]>;
+  hasEmailBeenSent(studentId: number, emailType: string, weekKey: string): Promise<boolean>;
+  recordEmailSent(studentId: number, emailType: string, weekKey: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -285,6 +289,29 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return { up, down, chips, latestChips };
+  }
+
+  async getBottomStrengthStudents(limit = 50): Promise<Student[]> {
+    return db.select().from(students)
+      .where(sql`${students.profileStrength} IS NOT NULL AND ${students.email} IS NOT NULL`)
+      .orderBy(students.profileStrength)
+      .limit(limit);
+  }
+
+  async hasEmailBeenSent(studentId: number, emailType: string, weekKey: string): Promise<boolean> {
+    const [row] = await db.select().from(emailNotifications)
+      .where(and(
+        eq(emailNotifications.studentId, studentId),
+        eq(emailNotifications.emailType, emailType),
+        eq(emailNotifications.weekKey, weekKey)
+      ));
+    return !!row;
+  }
+
+  async recordEmailSent(studentId: number, emailType: string, weekKey: string): Promise<void> {
+    await db.insert(emailNotifications)
+      .values({ studentId, emailType, weekKey })
+      .onConflictDoNothing();
   }
 
   async getPriorReactionContext(studentId: number): Promise<string> {

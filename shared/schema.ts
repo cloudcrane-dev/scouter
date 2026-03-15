@@ -58,6 +58,14 @@ export const analyticsEvents = pgTable("analytics_events", {
   date: text("date").notNull(),
 }, (t) => [unique().on(t.ipHash, t.date)]);
 
+export const emailNotifications = pgTable("email_notifications", {
+  id: serial("id").primaryKey(),
+  studentId: integer("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  emailType: text("email_type").notNull(),
+  weekKey: text("week_key").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
 export const analysisReactions = pgTable("analysis_reactions", {
   id: serial("id").primaryKey(),
   cachedResponseId: integer("cached_response_id").notNull().references(() => cachedResponses.id, { onDelete: "cascade" }),
