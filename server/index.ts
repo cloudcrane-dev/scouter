@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./seed";
+import cron from "node-cron";
+import { sendRankEmails } from "./rankEmails";
 
 const app = express();
 app.set("trust proxy", true);
@@ -87,6 +89,16 @@ app.use((req, res, next) => {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
+
+  // Weekly rank emails — every Monday at 9 AM IST (3:30 AM UTC)
+  cron.schedule("30 3 * * 1", async () => {
+    console.log("[RankEmails] Running weekly cron job...");
+    try {
+      await sendRankEmails();
+    } catch (err) {
+      console.error("[RankEmails] Cron job failed:", err);
+    }
+  }, { timezone: "UTC" });
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
