@@ -345,9 +345,9 @@ export class DatabaseStorage implements IStorage {
       id: students.id, name: students.name, email: students.email, rollNumber: students.rollNumber,
       phone: students.phone, pictureUrl: students.pictureUrl, searchCount: students.searchCount,
       feedbackCount: students.feedbackCount, profileStrength: students.profileStrength,
-      verified: sql<boolean>`EXISTS(SELECT 1 FROM users WHERE users.student_id = ${students.id})`,
-    }).from(students).where(whereExpr).orderBy(orderExpr).limit(limit);
-    return rows as LeaderboardEntry[];
+      userId: users.id,
+    }).from(students).leftJoin(users, eq(users.studentId, students.id)).where(whereExpr).orderBy(orderExpr).limit(limit);
+    return rows.map(({ userId, ...r }) => ({ ...r, verified: userId != null })) as LeaderboardEntry[];
   }
 
   async submitPersonalityRatings(raterId: number, rateeId: number, ratings: { trait: string; score: number }[]): Promise<void> {
@@ -422,8 +422,8 @@ export class DatabaseStorage implements IStorage {
       id: students.id, name: students.name, email: students.email, rollNumber: students.rollNumber,
       pictureUrl: students.pictureUrl, searchCount: students.searchCount, feedbackCount: students.feedbackCount,
       profileStrength: students.profileStrength, phone: students.phone,
-      verified: sql<boolean>`EXISTS(SELECT 1 FROM users WHERE users.student_id = ${students.id})`,
-    }).from(students).where(sql`${students.id} = ANY(ARRAY[${sql.raw(studentIds.join(","))}]::int[])`);
+      userId: users.id,
+    }).from(students).leftJoin(users, eq(users.studentId, students.id)).where(sql`${students.id} = ANY(ARRAY[${sql.raw(studentIds.join(","))}]::int[])`);
 
     const entries: PersonalityEntry[] = studentRows.map(s => {
       const data = byStudent[s.id];
@@ -440,7 +440,7 @@ export class DatabaseStorage implements IStorage {
         id: s.id, name: s.name, email: s.email, rollNumber: s.rollNumber,
         pictureUrl: s.pictureUrl, searchCount: s.searchCount, feedbackCount: s.feedbackCount,
         profileStrength: s.profileStrength, personalityScore: totalScore,
-        raterCount: data.raterCount, verified: Boolean(s.verified), topTraits,
+        raterCount: data.raterCount, verified: s.userId != null, topTraits,
       };
     }).sort((a, b) => b.personalityScore - a.personalityScore).slice(0, limit);
 

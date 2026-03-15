@@ -25,7 +25,7 @@ export default function HomePage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [limitHit, setLimitHit] = useState(false);
-  const [sortBy, setSortBy] = useState<"searches" | "feedback" | "strength" | "personality">("strength");
+  const [sortBy, setSortBy] = useState<"searches" | "strength" | "personality">("strength");
   const [leaderboardLimit, setLeaderboardLimit] = useState(20);
   const [, navigate] = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -286,7 +286,7 @@ export default function HomePage() {
                   <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">top ranked</span>
                 </div>
                 <div className="flex items-center border border-white/8 overflow-hidden">
-                  {(["strength", "searches", "feedback", "personality"] as const).map((tab, i) => (
+                  {(["strength", "searches", "personality"] as const).map((tab, i) => (
                     <button
                       key={tab}
                       onClick={() => { setSortBy(tab); setLeaderboardLimit(20); }}
@@ -296,9 +296,8 @@ export default function HomePage() {
                       }`}
                     >
                       {tab === "searches" && <Eye className="w-2.5 h-2.5" />}
-                      {tab === "feedback" && <MessageSquare className="w-2.5 h-2.5" />}
                       {tab === "personality" && <Smile className="w-2.5 h-2.5" />}
-                      {tab === "strength" ? "strength" : tab === "searches" ? "views" : tab === "feedback" ? "intel" : "vibe"}
+                      {tab === "strength" ? "strength" : tab === "searches" ? "views" : "vibe"}
                     </button>
                   ))}
                 </div>

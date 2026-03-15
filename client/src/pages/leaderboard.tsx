@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trophy, Eye, MessageSquare, ArrowLeft, CheckCircle, Smile } from "lucide-react";
+import { Trophy, Eye, ArrowLeft, CheckCircle, Smile } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Student } from "@shared/schema";
 
@@ -20,7 +20,7 @@ function getInitials(name: string) {
 }
 
 export default function LeaderboardPage() {
-  const [sortBy, setSortBy] = useState<"strength" | "searches" | "feedback" | "personality">("strength");
+  const [sortBy, setSortBy] = useState<"strength" | "searches" | "personality">("strength");
   const [, navigate] = useLocation();
 
   const { data: leaderboard, isLoading } = useQuery<(LeaderboardEntry | PersonalityEntry)[]>({
@@ -30,7 +30,6 @@ export default function LeaderboardPage() {
   const tabs = [
     { key: "strength" as const, label: "strength" },
     { key: "searches" as const, label: "views", icon: <Eye className="w-3 h-3" /> },
-    { key: "feedback" as const, label: "intel", icon: <MessageSquare className="w-3 h-3" /> },
     { key: "personality" as const, label: "vibe", icon: <Smile className="w-3 h-3" /> },
   ];
 

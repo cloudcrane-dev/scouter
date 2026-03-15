@@ -649,15 +649,14 @@ export default function StudentPage() {
           <div className="flex items-center gap-2 mb-4 font-mono">
             <Smile className="w-3.5 h-3.5 text-foreground" />
             <h2 className="font-semibold text-xs uppercase tracking-widest">personality</h2>
-            {personalityData && personalityData.raterCount >= 3 && (
+            {personalityData && personalityData.raterCount >= 1 && (
               <span className="ml-auto text-[10px] font-mono text-muted-foreground tabular-nums">
-                {personalityData.totalScore}/100 · {personalityData.raterCount} raters
+                {personalityData.totalScore}/100 · {personalityData.raterCount} rater{personalityData.raterCount !== 1 ? "s" : ""}
               </span>
             )}
           </div>
 
-          {/* Aggregate bars — visible if ≥3 raters */}
-          {personalityData && personalityData.raterCount >= 3 ? (
+          {personalityData && personalityData.raterCount >= 1 ? (
             <div className="space-y-2 mb-4">
               {personalityData.traits.filter(t => t.avgScore > 0).sort((a, b) => b.avgScore - a.avgScore).map(t => (
                 <div key={t.key} className="flex items-center gap-2" data-testid={`personality-bar-${t.key}`}>
@@ -674,10 +673,6 @@ export default function StudentPage() {
                 </div>
               ))}
             </div>
-          ) : personalityData && personalityData.raterCount > 0 ? (
-            <p className="text-[10px] font-mono text-muted-foreground/50 mb-4">
-              {personalityData.raterCount < 3 ? `${3 - personalityData.raterCount} more rating${3 - personalityData.raterCount === 1 ? "" : "s"} needed to reveal scores` : ""}
-            </p>
           ) : null}
 
           {/* Rating UI — auth only, non-self */}
@@ -727,9 +722,12 @@ export default function StudentPage() {
               );
             })()
           ) : !isAuthenticated ? (
-            <p className="text-[10px] font-mono text-muted-foreground/40 pt-2 border-t border-white/8">
-              sign in to rate this person's vibe
-            </p>
+            <div className="pt-3 border-t border-white/8 flex items-center gap-2">
+              <Smile className="w-3 h-3 text-muted-foreground/40" />
+              <p className="text-[10px] font-mono text-muted-foreground/50">
+                log in with your @iitj.ac.in account to rate their personality
+              </p>
+            </div>
           ) : null}
         </motion.div>
         )}
