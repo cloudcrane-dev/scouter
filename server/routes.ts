@@ -329,16 +329,16 @@ End with one line:
 **Verdict:** <one honest, direct sentence summarising where they stand and the single most important thing to do next>
 
 OUTPUT FORMAT — STRICT:
-After the full review text above, append a [RATINGS] block with exactly these 4 integer scores (1–5):
-- onlinePresence: visibility across web + social platforms (5 = strong multi-platform presence, 1 = ghost)
-- codingActivity: GitHub, LeetCode, coding projects, technical output (5 = highly active, 1 = no evidence)
-- realWorldExperience: internships, research, clubs, competitions, achievements (5 = strong track record, 1 = none found)
-- profileCompleteness: claimed profile, photo, social links, filled sections (5 = fully built out, 1 = bare unclaimed profile)
+After the full review text above, append a [RATINGS] block with exactly these 4 integer scores (1–10):
+- onlinePresence: visibility across web + social platforms (10 = dominant multi-platform presence, 7 = solid and discoverable, 4 = minimal traces, 1 = ghost)
+- codingActivity: GitHub, LeetCode, coding projects, technical output (10 = mass contributions & competitive success, 7 = regular commits & problem-solving, 4 = sparse activity, 1 = no evidence)
+- realWorldExperience: internships, research, clubs, competitions, achievements (10 = multiple internships + published research + awards, 7 = meaningful experience, 4 = early-stage involvement, 1 = none found)
+- profileCompleteness: claimed profile, photo, social links, filled sections (10 = fully built out with rich detail, 7 = most sections filled, 4 = partial, 1 = bare unclaimed profile)
 
-Score honestly. Missing data = low score. Don't round up without evidence.
+Score honestly. Use the full 1–10 range — don't cluster around 5. Missing data = low score. Don't round up without evidence.
 
 [RATINGS]
-{"onlinePresence":3,"codingActivity":4,"realWorldExperience":2,"profileCompleteness":5}
+{"onlinePresence":6,"codingActivity":8,"realWorldExperience":3,"profileCompleteness":9}
 [/RATINGS]`;
 
   const identifiers = [`**Name:** ${student.name}`];

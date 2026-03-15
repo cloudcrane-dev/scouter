@@ -16,7 +16,7 @@ function hashIp(ip: string): string {
 export function computeProfileStrength(ratings: Record<string, number>): number {
   const keys = ["onlinePresence", "codingActivity", "realWorldExperience", "profileCompleteness"];
   const sum = keys.reduce((acc, k) => acc + (ratings[k] ?? 1), 0);
-  return Math.round((sum / (keys.length * 5)) * 100);
+  return Math.round((sum / (keys.length * 10)) * 100);
 }
 
 function todayStr(): string {

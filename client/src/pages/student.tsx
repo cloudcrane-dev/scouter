@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Eye, MessageSquare, Mail, Sparkles,
-  Send, RefreshCw, User, Terminal, ShieldCheck, ExternalLink, Star,
+  Send, RefreshCw, User, Terminal, ShieldCheck, ExternalLink,
 } from "lucide-react";
 import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -98,28 +98,34 @@ const RATING_PARAMS = [
   { key: "profileCompleteness", label: "Profile Completeness" },
 ];
 
-function StarRow({ score }: { score: number }) {
-  const clamped = Math.max(1, Math.min(5, Math.round(score)));
+function RatingBar({ score }: { score: number }) {
+  const clamped = Math.max(1, Math.min(10, Math.round(score)));
+  const pct = (clamped / 10) * 100;
   return (
-    <div className="flex gap-0.5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star
-          key={i}
-          className={`w-3 h-3 ${i < clamped ? "fill-foreground text-foreground" : "fill-none text-muted-foreground/30"}`}
+    <div className="flex items-center gap-2">
+      <div className="w-20 h-1.5 bg-white/5 overflow-hidden">
+        <motion.div
+          className="h-full bg-foreground"
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
         />
-      ))}
+      </div>
+      <span className="text-[10px] font-mono tabular-nums text-foreground/80 w-8 text-right">
+        {clamped}<span className="text-muted-foreground/40">/10</span>
+      </span>
     </div>
   );
 }
 
 function RatingsDisplay({ ratings }: { ratings: Record<string, number> }) {
   return (
-    <div className="mt-4 pt-4 border-t border-white/8 space-y-2">
+    <div className="mt-4 pt-4 border-t border-white/8 space-y-2.5">
       <p className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest mb-3">// intel scores</p>
       {RATING_PARAMS.map(({ key, label }) => (
         <div key={key} className="flex items-center justify-between gap-2" data-testid={`rating-${key}`}>
           <span className="text-[10px] font-mono text-muted-foreground/70 truncate">{label}</span>
-          <StarRow score={ratings[key] ?? 1} />
+          <RatingBar score={ratings[key] ?? 1} />
         </div>
       ))}
     </div>
