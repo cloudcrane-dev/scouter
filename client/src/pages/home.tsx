@@ -17,7 +17,7 @@ export default function HomePage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [limitHit, setLimitHit] = useState(false);
-  const [sortBy, setSortBy] = useState<"searches" | "feedback" | "strength">("searches");
+  const [sortBy, setSortBy] = useState<"searches" | "feedback" | "strength">("strength");
   const [leaderboardLimit, setLeaderboardLimit] = useState(20);
   const [, navigate] = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
