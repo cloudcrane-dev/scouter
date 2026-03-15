@@ -145,7 +145,7 @@ export async function sendPersonalityRatingNotification(opts: {
           Your vibe scores just got updated — log in to see how people perceive you.
         </p>
         <p style="margin:12px 0 0;font-size:13px;line-height:1.65;color:#aaa;">
-          Traits like <strong style="color:#e5e5e5;">Looks, Brains, Fitness, Funny, Charm</strong> and <strong style="color:#e5e5e5;">Romantic</strong>
+          Traits like <strong style="color:#e5e5e5;">Looks, Brains, Fitness, Funny</strong> and <strong style="color:#e5e5e5;">Charm</strong>
           — all scored anonymously by your peers. 👀
         </p>
       </td>

@@ -64,7 +64,7 @@ A mobile-friendly web application for scouting and analyzing IIT Jodhpur student
 - `GET /api/students/:id/social-links` - Get social links for a student
 - `PUT /api/students/:id/social-links` - Update social links (auth required, own profile only)
 - `GET /api/leaderboard?sort=strength|searches|personality&trait=<key>&limit=N` - Get leaderboard; personality sort supports optional trait filter (e.g. trait=funny); returns dominant trait + score /5; other tabs include verified badge
-- `GET /api/students/:id/personality` - Get personality trait data (6 traits: Looks/Brains/Fitness/Funny/Charm/Romantic, avgScore, raterCount, myRating)
+- `GET /api/students/:id/personality` - Get personality trait data (5 traits: Looks/Brains/Fitness/Funny/Charm, avgScore, raterCount, myRating)
 - `POST /api/students/:id/personality-rate` - Submit personality ratings 1-5 per trait (auth required, blocks self-rating, sends email notification max 1/day)
 - `GET /api/stats` - Get total student count
 - `GET /api/search-limit` - Get daily search quota for current IP
