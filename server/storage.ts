@@ -12,8 +12,9 @@ export type LeaderboardEntry = Student & { verified: boolean };
 export type PersonalityEntry = {
   id: number; name: string; email: string; rollNumber: string | null;
   pictureUrl: string | null; searchCount: number; feedbackCount: number; profileStrength: number | null;
-  personalityScore: number; raterCount: number; verified: boolean;
-  topTraits: { trait: string; label: string; emoji: string; score: number }[];
+  raterCount: number; verified: boolean;
+  dominantTrait: { key: string; label: string; emoji: string; score: number } | null;
+  traitScore: number;
 };
 export type PersonalityData = {
   traits: { key: string; label: string; emoji: string; avgScore: number }[];
@@ -89,7 +90,7 @@ export interface IStorage {
   getLeaderboardWithVerified(sortBy: "searches" | "feedback" | "strength", limit?: number): Promise<LeaderboardEntry[]>;
   submitPersonalityRatings(raterId: number, rateeId: number, ratings: { trait: string; score: number }[]): Promise<void>;
   getPersonalityData(rateeId: number, raterId?: number): Promise<PersonalityData>;
-  getPersonalityLeaderboard(limit?: number): Promise<PersonalityEntry[]>;
+  getPersonalityLeaderboard(limit?: number, traitFilter?: string): Promise<PersonalityEntry[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -399,13 +400,17 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getPersonalityLeaderboard(limit = 20): Promise<PersonalityEntry[]> {
+  async getPersonalityLeaderboard(limit = 20, traitFilter?: string): Promise<PersonalityEntry[]> {
+    const validTrait = traitFilter && PERSONALITY_TRAITS.some(t => t.key === traitFilter) ? traitFilter : undefined;
+
+    const whereClause = validTrait ? eq(personalityRatings.trait, validTrait) : undefined;
     const rows = await db.select({
       rateeId: personalityRatings.rateeId,
       trait: personalityRatings.trait,
       avgScore: sql<number>`AVG(${personalityRatings.score})`,
       raterCount: sql<number>`COUNT(DISTINCT ${personalityRatings.raterId})`,
     }).from(personalityRatings)
+      .where(whereClause as any)
       .groupBy(personalityRatings.rateeId, personalityRatings.trait);
 
     const byStudent: Record<number, { traits: Record<string, number>; raterCount: number }> = {};
@@ -425,24 +430,38 @@ export class DatabaseStorage implements IStorage {
       userId: users.id,
     }).from(students).leftJoin(users, eq(users.studentId, students.id)).where(sql`${students.id} = ANY(ARRAY[${sql.raw(studentIds.join(","))}]::int[])`);
 
+    const traitMeta = Object.fromEntries(PERSONALITY_TRAITS.map(t => [t.key, t]));
+
     const entries: PersonalityEntry[] = studentRows.map(s => {
       const data = byStudent[s.id];
-      const ratedTraits = Object.entries(data.traits).filter(([, v]) => v > 0);
-      const totalScore = ratedTraits.length > 0
-        ? Math.round((ratedTraits.reduce((sum, [, v]) => sum + v, 0) / ratedTraits.length) / 5 * 100)
-        : 0;
-      const topTraits = PERSONALITY_TRAITS
-        .filter(t => data.traits[t.key] != null)
-        .map(t => ({ trait: t.key, label: t.label, emoji: t.emoji, score: Number((data.traits[t.key]).toFixed(1)) }))
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 3);
+      let dominantTrait: PersonalityEntry["dominantTrait"] = null;
+      let traitScore = 0;
+
+      if (validTrait) {
+        const score = data.traits[validTrait] ?? 0;
+        const meta = traitMeta[validTrait];
+        dominantTrait = meta ? { key: meta.key, label: meta.label, emoji: meta.emoji, score: Number(score.toFixed(1)) } : null;
+        traitScore = Number(score.toFixed(1));
+      } else {
+        let bestKey = "";
+        let bestScore = 0;
+        for (const [k, v] of Object.entries(data.traits)) {
+          if (v > bestScore) { bestScore = v; bestKey = k; }
+        }
+        if (bestKey && traitMeta[bestKey]) {
+          const meta = traitMeta[bestKey];
+          dominantTrait = { key: meta.key, label: meta.label, emoji: meta.emoji, score: Number(bestScore.toFixed(1)) };
+          traitScore = Number(bestScore.toFixed(1));
+        }
+      }
+
       return {
         id: s.id, name: s.name, email: s.email, rollNumber: s.rollNumber,
         pictureUrl: s.pictureUrl, searchCount: s.searchCount, feedbackCount: s.feedbackCount,
-        profileStrength: s.profileStrength, personalityScore: totalScore,
-        raterCount: data.raterCount, verified: s.userId != null, topTraits,
+        profileStrength: s.profileStrength,
+        raterCount: data.raterCount, verified: s.userId != null, dominantTrait, traitScore,
       };
-    }).sort((a, b) => b.personalityScore - a.personalityScore).slice(0, limit);
+    }).sort((a, b) => b.traitScore - a.traitScore).slice(0, limit);
 
     return entries;
   }

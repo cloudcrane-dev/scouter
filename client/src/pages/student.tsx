@@ -649,11 +649,14 @@ export default function StudentPage() {
           <div className="flex items-center gap-2 mb-4 font-mono">
             <Smile className="w-3.5 h-3.5 text-foreground" />
             <h2 className="font-semibold text-xs uppercase tracking-widest">personality</h2>
-            {personalityData && personalityData.raterCount >= 1 && (
-              <span className="ml-auto text-[10px] font-mono text-muted-foreground tabular-nums">
-                {personalityData.totalScore}/100 · {personalityData.raterCount} rater{personalityData.raterCount !== 1 ? "s" : ""}
-              </span>
-            )}
+            {personalityData && personalityData.raterCount >= 1 && (() => {
+              const best = personalityData.traits.filter(t => t.avgScore > 0).sort((a, b) => b.avgScore - a.avgScore)[0];
+              return (
+                <span className="ml-auto text-[10px] font-mono text-muted-foreground tabular-nums">
+                  {best ? `${best.emoji} ${best.label}` : ""} · {personalityData.raterCount} rater{personalityData.raterCount !== 1 ? "s" : ""}
+                </span>
+              );
+            })()}
           </div>
 
           {personalityData && personalityData.raterCount >= 1 ? (

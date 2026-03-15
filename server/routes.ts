@@ -914,7 +914,8 @@ export async function registerRoutes(
       const rawSort = req.query.sort as string;
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
       if (rawSort === "personality") {
-        const leaderboard = await storage.getPersonalityLeaderboard(limit);
+        const trait = req.query.trait as string | undefined;
+        const leaderboard = await storage.getPersonalityLeaderboard(limit, trait);
         return res.json(leaderboard);
       }
       const sortBy = rawSort === "feedback" ? "feedback" : rawSort === "strength" ? "strength" : "searches";
