@@ -320,13 +320,14 @@ Start with 1–2 sentences introducing the student: program, batch year, and a q
 3–5 bullet points. Honest gaps. If their LinkedIn Experience is empty, say so. If they have no GitHub, say so. Don't soften real problems.
 
 ## Suggestions
-4–6 concrete, actionable bullet points. Think like a placement advisor:
+4–6 concrete, actionable bullet points. For students, think like a placement advisor:
 - What should they build, write, or publish?
 - Which platforms need attention?
 - What specific sections on LinkedIn/GitHub/etc. should they fill out?
 - Any competitions, open source projects, or certifications worth pursuing for their field?
 
-Make suggestions specific to their branch and year — a 2nd year CS student needs different advice than a final year Metallurgy student.
+For students: make suggestions specific to their branch and year — a 2nd year CS student needs different advice than a final year Metallurgy student.
+For faculty/staff: focus on research visibility, citation metrics, collaboration opportunities, and institutional presence instead of placement advice.
 
 If peer feedback exists, weave the most relevant insight naturally into Strengths or Improvement Areas — don't create a separate section for it.
 

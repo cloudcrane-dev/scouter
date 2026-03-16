@@ -1,10 +1,10 @@
-export const DEGREE_CODES: Record<string, { label: string; degree: string; durationYears: number }> = {
+export const DEGREE_CODES = {
   B: { label: "Bachelor's", degree: "B.Tech", durationYears: 4 },
   M: { label: "Master's", degree: "M.Tech/M.Des/MSc", durationYears: 2 },
   P: { label: "PhD", degree: "PhD", durationYears: 5 },
-};
+} as const;
 
-export const BRANCH_CODES: Record<string, string> = {
+export const BRANCH_CODES = {
   CS: "Computer Science",
   EE: "Electrical Engineering",
   ME: "Mechanical Engineering",
@@ -18,7 +18,12 @@ export const BRANCH_CODES: Record<string, string> = {
   PH: "Physics",
   MT: "Metallurgy & Materials",
   BS: "Bioscience",
-};
+} as const;
+
+export type DegreeCode = keyof typeof DEGREE_CODES;
+export type BranchCode = keyof typeof BRANCH_CODES;
+
+export const ROLL_NUMBER_REGEX = /^([BMP])(\d{2})([A-Z]{2,3})(\d+)$/i;
 
 const ROLL_REGEX = /^([BMP])(\d{2})([A-Z]{2,3})(\d+)$/i;
 const PHD_ROLL_REGEX = /^PHD(\d{2})([A-Z]{2,3})(\d+)$/i;
@@ -66,8 +71,8 @@ export function parseRollNumber(roll: string | null | undefined): ParsedRoll | n
     [, degreeChar, yearStr, branchStr] = match!;
   }
 
-  const degreeInfo = DEGREE_CODES[degreeChar.toUpperCase()];
-  const branchName = BRANCH_CODES[branchStr.toUpperCase()];
+  const degreeInfo = DEGREE_CODES[degreeChar.toUpperCase() as DegreeCode];
+  const branchName = BRANCH_CODES[branchStr.toUpperCase() as BranchCode];
   const batchYear = 2000 + parseInt(yearStr, 10);
 
   const hasDegree = !!degreeInfo;
