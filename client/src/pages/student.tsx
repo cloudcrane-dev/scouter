@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Student } from "@shared/schema";
 import { PERSONALITY_TRAITS } from "@shared/schema";
+import { parseRollNumber, classifyIITJEmail, formatParsedRoll } from "@shared/iitj";
 
 function getInitials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -438,11 +439,31 @@ export default function StudentPage() {
                 <span className="truncate" data-testid="text-student-email">{student.email}</span>
               </div>
               {student.rollNumber && (
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2 font-mono">
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-1 font-mono">
                   <Terminal className="w-3 h-3 shrink-0" />
                   <span data-testid="text-student-roll">{student.rollNumber}</span>
                 </div>
               )}
+              {(() => {
+                const parsed = parseRollNumber(student.rollNumber);
+                const personType = classifyIITJEmail(student.email);
+                const rollDecodesAsStudent = parsed && parsed.confidence !== "unknown";
+                if (personType === "faculty_or_staff" && !rollDecodesAsStudent) {
+                  return (
+                    <div className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-white/10 text-[9px] text-muted-foreground font-mono mb-2" data-testid="badge-academic-info">
+                      Faculty / Staff · IIT Jodhpur
+                    </div>
+                  );
+                }
+                if (parsed && parsed.confidence !== "unknown") {
+                  return (
+                    <div className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-white/10 text-[9px] text-muted-foreground font-mono mb-2" data-testid="badge-academic-info">
+                      {formatParsedRoll(parsed)}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               <div className="flex items-center gap-3">
                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono" data-testid="badge-search-count">
                   <Eye className="w-3 h-3" />

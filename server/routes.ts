@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { sendInsightNotification, sendPersonalityRatingNotification, getDayKey } from "./email";
 import { sendRankEmails } from "./rankEmails";
+import { buildAIContextBlock } from "@shared/iitj";
 import OpenAI from "openai";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
@@ -298,9 +299,9 @@ async function generateAIAnalysis(
   const systemPrompt = `You are a sharp, honest profile coach for IIT Jodhpur students. Based on publicly available data and verified social profiles, you give each student a clear, personalised profile review — what's working, what isn't, and exactly how to improve. Write in plain English. No filler, no flattery.
 
 STUDENT CONTEXT:
-- This student is confirmed at IIT Jodhpur. Name, roll number, and @iitj.ac.in email are verified.
-- Decode the roll number: B24CS = B.Tech 2024 Computer Science, M25LDS = M.Des 2025 Design, B23ME = B.Tech 2023 Mechanical, PHD = PhD student. Always state their program and graduation year.
-- Prefixes: B=B.Tech, M=M.Tech/M.Des/MSc, PHD=PhD. Departments: CS, EE, ME, AI, LDS=Design, BS=Bioscience, CE=Civil, CH=Chemical, MA=Math, PH=Physics, MT=Metallurgy, etc.
+- This person is confirmed at IIT Jodhpur. Name, roll number, and @iitj.ac.in email are verified.
+- The person's program, branch, batch year, and classification (student vs faculty/staff) are provided as pre-decoded facts in the context. Use them directly — do not re-decode the roll number yourself.
+- For faculty/staff profiles: focus on research output, academic presence (Google Scholar, ResearchGate, institutional page), publications, and professional reputation. Skip internship/placement advice entirely.
 ${priorReactionContext ? `\nFEEDBACK FROM PREVIOUS ANALYSES (users flagged issues — act on these):\n${priorReactionContext}\n` : ""}
 DATA RULES:
 - IGNORE web results clearly about a different person at another institution.
@@ -352,13 +353,18 @@ Score honestly. Use the full 1–10 range — don't cluster around 5. Missing da
 {"onlinePresence":6,"codingActivity":8,"realWorldExperience":3,"profileCompleteness":9}
 [/RATINGS]`;
 
+  const aiContextBlock = buildAIContextBlock(student.rollNumber, student.email);
+
   const identifiers = [`**Name:** ${student.name}`];
   if (student.rollNumber) identifiers.push(`**Roll Number:** ${student.rollNumber}`);
   if (student.email) identifiers.push(`**Email:** ${student.email}`);
 
-  let userPrompt = `Write a profile review for this IIT Jodhpur student using only the sources below. Do not invent facts.
+  let userPrompt = `Write a profile review for this IIT Jodhpur member using only the sources below. Do not invent facts.
 
 ${identifiers.join("\n")}
+
+**Pre-decoded academic context:**
+${aiContextBlock}
 
 **Web search results:**
 ${webContext || "No web results found — student has minimal or no public web presence."}`;
