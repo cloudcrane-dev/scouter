@@ -24,9 +24,7 @@ export type DegreeCode = keyof typeof DEGREE_CODES;
 export type BranchCode = keyof typeof BRANCH_CODES;
 
 export const ROLL_NUMBER_REGEX = /^([BMP])(\d{2})([A-Z]{2,3})(\d+)$/i;
-
-const ROLL_REGEX = /^([BMP])(\d{2})([A-Z]{2,3})(\d+)$/i;
-const PHD_ROLL_REGEX = /^PHD(\d{2})([A-Z]{2,3})(\d+)$/i;
+export const PHD_ROLL_REGEX = /^PHD(\d{2})([A-Z]{2,3})(\d+)$/i;
 const STUDENT_EMAIL_REGEX = /^(?:[bmp]\d{2}[a-z]{2,3}\d+|phd\d{2}[a-z]{2,3}\d+)@iitj\.ac\.in$/i;
 
 export type ParsedRoll = {
@@ -44,7 +42,7 @@ export function parseRollNumber(roll: string | null | undefined): ParsedRoll | n
   if (!roll || !roll.trim()) return null;
 
   const raw = roll.trim().toUpperCase();
-  const match = raw.match(ROLL_REGEX);
+  const match = raw.match(ROLL_NUMBER_REGEX);
   const phdMatch = !match ? raw.match(PHD_ROLL_REGEX) : null;
 
   if (!match && !phdMatch) {
