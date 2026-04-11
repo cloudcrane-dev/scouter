@@ -3,40 +3,28 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trophy, Eye, ArrowLeft, CheckCircle, Smile } from "lucide-react";
+import { Trophy, Eye, ArrowLeft, CheckCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Student } from "@shared/schema";
-import { PERSONALITY_TRAITS } from "@shared/schema";
 
 type LeaderboardEntry = Student & { verified?: boolean };
-type PersonalityEntry = {
-  id: number; name: string; email: string; rollNumber: string | null;
-  pictureUrl: string | null; searchCount: number; feedbackCount: number; profileStrength: number | null;
-  raterCount: number; verified: boolean;
-  dominantTrait: { key: string; label: string; emoji: string; score: number } | null;
-  traitScore: number;
-};
 
 function getInitials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
 export default function LeaderboardPage() {
-  const [sortBy, setSortBy] = useState<"strength" | "searches" | "personality">("strength");
-  const [traitFilter, setTraitFilter] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"strength" | "searches">("strength");
   const [, navigate] = useLocation();
 
-  const leaderboardQs = sortBy === "personality" && traitFilter
-    ? `?sort=${sortBy}&trait=${traitFilter}&limit=20`
-    : `?sort=${sortBy}&limit=20`;
-  const { data: leaderboard, isLoading } = useQuery<(LeaderboardEntry | PersonalityEntry)[]>({
+  const leaderboardQs = `?sort=${sortBy}&limit=20`;
+  const { data: leaderboard, isLoading } = useQuery<LeaderboardEntry[]>({
     queryKey: ["/api/leaderboard", leaderboardQs],
   });
 
   const tabs = [
     { key: "strength" as const, label: "strength" },
     { key: "searches" as const, label: "views", icon: <Eye className="w-3 h-3" /> },
-    { key: "personality" as const, label: "vibe", icon: <Smile className="w-3 h-3" /> },
   ];
 
   return (
@@ -78,7 +66,7 @@ export default function LeaderboardPage() {
           {tabs.map((tab, i) => (
             <button
               key={tab.key}
-              onClick={() => { setSortBy(tab.key); if (tab.key !== "personality") setTraitFilter(null); }}
+              onClick={() => setSortBy(tab.key)}
               data-testid={`button-sort-${tab.key}`}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-[10px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer ${i > 0 ? "border-l border-white/8" : ""} ${
                 sortBy === tab.key ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
@@ -89,34 +77,6 @@ export default function LeaderboardPage() {
             </button>
           ))}
         </motion.div>
-
-        {sortBy === "personality" && (
-          <motion.div
-            className="flex items-center justify-center gap-1.5 mb-5 flex-wrap"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <button
-              onClick={() => setTraitFilter(null)}
-              data-testid="trait-filter-all"
-              className={`px-2.5 py-1 text-[10px] font-mono transition-all duration-150 cursor-pointer border ${
-                !traitFilter ? "border-foreground/40 text-foreground bg-white/5" : "border-white/8 text-muted-foreground/50 hover:text-muted-foreground hover:border-white/15"
-              }`}
-            >all</button>
-            {PERSONALITY_TRAITS.map(t => (
-              <button
-                key={t.key}
-                onClick={() => setTraitFilter(traitFilter === t.key ? null : t.key)}
-                data-testid={`trait-filter-${t.key}`}
-                title={t.label}
-                className={`px-2 py-1 text-sm transition-all duration-150 cursor-pointer border ${
-                  traitFilter === t.key ? "border-foreground/40 bg-white/5 scale-110" : "border-white/8 opacity-50 hover:opacity-100 hover:border-white/15"
-                }`}
-              >{t.emoji}</button>
-            ))}
-          </motion.div>
-        )}
 
         {isLoading ? (
           <div className="space-y-0">
@@ -136,8 +96,7 @@ export default function LeaderboardPage() {
         ) : leaderboard && leaderboard.length > 0 ? (
           <div className="border border-white/8 mb-20">
             {leaderboard.map((student, index) => {
-              const pe = sortBy === "personality" ? (student as PersonalityEntry) : null;
-              const le = sortBy !== "personality" ? (student as LeaderboardEntry) : null;
+              const le = student as LeaderboardEntry;
               return (
                 <motion.div
                   key={student.id}
@@ -172,24 +131,14 @@ export default function LeaderboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         <p className="font-mono text-xs tracking-wide group-hover:text-foreground transition-colors duration-150 truncate">{student.name}</p>
-                        {(le?.verified || pe?.verified) && (
-                          <CheckCircle className="w-2.5 h-2.5 text-blue-400 shrink-0" title="Verified IITJ student" />
+                        {le?.verified && (
+                          <CheckCircle className="w-2.5 h-2.5 text-blue-400 shrink-0" />
                         )}
                       </div>
-                      {pe && pe.dominantTrait ? (
-                        <p className="text-[10px] text-muted-foreground font-mono">
-                          {pe.dominantTrait.emoji} {pe.dominantTrait.label}
-                        </p>
-                      ) : (
-                        <p className="text-[10px] text-muted-foreground truncate font-mono">{student.rollNumber ?? student.email}</p>
-                      )}
+                      <p className="text-[10px] text-muted-foreground truncate font-mono">{student.rollNumber ?? student.email}</p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 text-[10px] text-muted-foreground font-mono">
-                      {pe ? (
-                        <span className="flex items-center gap-0.5 font-bold text-foreground tabular-nums">
-                          {pe.traitScore.toFixed(1)}<span className="text-[8px] font-normal text-muted-foreground">/5</span>
-                        </span>
-                      ) : sortBy === "strength" && student.profileStrength != null ? (
+                      {sortBy === "strength" && student.profileStrength != null ? (
                         <span className="flex items-center gap-0.5 font-bold text-foreground tabular-nums">
                           {student.profileStrength}<span className="text-[8px] font-normal text-muted-foreground">/100</span>
                         </span>
