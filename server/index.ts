@@ -1,4 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import createMemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -13,6 +15,17 @@ declare module "http" {
   }
 }
 
+declare module "express-session" {
+  interface SessionData {
+    user?: {
+      handle: string;
+      displayName: string;
+    };
+  }
+}
+
+const MemoryStore = createMemoryStore(session);
+
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -22,6 +35,22 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "scouter-dev-secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    },
+    store: new MemoryStore({
+      checkPeriod: 1000 * 60 * 60,
+    }),
+  })
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

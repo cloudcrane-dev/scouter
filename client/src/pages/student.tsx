@@ -2,15 +2,16 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Eye, MessageSquare, Mail, Sparkles,
-  Send, RefreshCw, User, Terminal,
+  RefreshCw, User, Terminal, Lock, ThumbsUp, Upload, Download,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/hooks/use-auth";
 import type { Student } from "@shared/schema";
 
 function getInitials(name: string) {
@@ -94,7 +95,8 @@ export default function StudentPage() {
   const id = parseInt(params.id || "0");
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [feedbackContent, setFeedbackContent] = useState("");
+  const { isLoggedIn } = useAuth();
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
 
   const { data: student, isLoading: studentLoading } = useQuery<Student>({
     queryKey: ["/api/students", id.toString()],
@@ -114,6 +116,34 @@ export default function StudentPage() {
     enabled: false,
   });
 
+  const { data: upvoteStatus } = useQuery<{ upvoteCount: number; hasUpvoted: boolean }>({
+    queryKey: ["/api/students", id.toString(), "upvote-status"],
+    enabled: id > 0,
+  });
+
+  const { data: latestResumeRating } = useQuery<{
+    rating: number;
+    summary: string;
+    improvementFactors: string[];
+    fileName: string;
+    createdAt: string;
+  } | null>({
+    queryKey: ["/api/students", id.toString(), "resume-rating", "me"],
+    enabled: id > 0 && isLoggedIn,
+  });
+
+  const { data: profileResumes } = useQuery<Array<{
+    id: number;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    uploadedBy: string;
+    createdAt: string;
+  }>>({
+    queryKey: ["/api/students", id.toString(), "resumes"],
+    enabled: id > 0 && isLoggedIn,
+  });
+
   const analyzeMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/students/${id}/analyze`);
@@ -127,25 +157,75 @@ export default function StudentPage() {
     },
   });
 
-  const feedbackMutation = useMutation({
+  const upvoteMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/students/${id}/feedback`, {
-        content: feedbackContent,
-        authorName: null,
+      const res = await apiRequest("POST", `/api/students/${id}/upvote`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString(), "upvote-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString()] });
+      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
+      toast({ title: "upvoted", description: "profile vote recorded." });
+    },
+    onError: () => {
+      toast({ title: "error", description: "upvote failed or already used.", variant: "destructive" });
+    },
+  });
+
+  const resumeRatingMutation = useMutation({
+    mutationFn: async () => {
+      if (!resumeFile) {
+        throw new Error("No file selected");
+      }
+      const resumeText = (await resumeFile.text()).trim();
+      const res = await apiRequest("POST", `/api/students/${id}/resume-rating`, {
+        resumeText,
+        fileName: resumeFile.name,
       });
       return res.json();
     },
     onSuccess: () => {
-      setFeedbackContent("");
-      queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString(), "feedback"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString()] });
-      queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
-      toast({ title: "transmitted", description: "insight recorded." });
+      queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString(), "resume-rating", "me"] });
+      toast({ title: "rated", description: "resume score generated." });
     },
     onError: () => {
-      toast({ title: "error", description: "transmission failed.", variant: "destructive" });
+      toast({ title: "error", description: "resume rating failed.", variant: "destructive" });
     },
   });
+
+  const resumeUploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!resumeFile) {
+        throw new Error("No file selected");
+      }
+      const bytes = new Uint8Array(await resumeFile.arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const contentBase64 = btoa(binary);
+
+      const res = await apiRequest("POST", `/api/students/${id}/resumes`, {
+        fileName: resumeFile.name,
+        mimeType: resumeFile.type || "application/octet-stream",
+        sizeBytes: resumeFile.size,
+        contentBase64,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString(), "resumes"] });
+      toast({ title: "uploaded", description: "resume is now visible to other users." });
+    },
+    onError: () => {
+      toast({ title: "error", description: "resume upload failed.", variant: "destructive" });
+    },
+  });
+
+  function downloadResume(resumeId: number) {
+    window.open(`/api/students/${id}/resumes/${resumeId}/download`, "_blank");
+  }
 
   if (studentLoading) {
     return (
@@ -212,9 +292,9 @@ export default function StudentPage() {
                   <Eye className="w-3 h-3" />
                   {student.searchCount} views
                 </span>
-                <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono" data-testid="badge-feedback-count">
-                  <MessageSquare className="w-3 h-3" />
-                  {student.feedbackCount} insights
+                <span className="flex items-center gap-1 text-[10px] text-muted-foreground font-mono" data-testid="badge-upvote-count">
+                  <ThumbsUp className="w-3 h-3" />
+                  {upvoteStatus?.upvoteCount ?? student.upvoteCount} upvotes
                 </span>
               </div>
             </div>
@@ -295,28 +375,105 @@ export default function StudentPage() {
           className="border border-white/8 bg-card p-5 mb-20"
         >
           <div className="flex items-center gap-2 mb-3 font-mono">
-            <MessageSquare className="w-3.5 h-3.5 text-foreground" />
-            <h2 className="font-semibold text-xs uppercase tracking-widest">add insight</h2>
+            <Upload className="w-3.5 h-3.5 text-foreground" />
+            <h2 className="font-semibold text-xs uppercase tracking-widest">resume rating + upvote</h2>
           </div>
-          <div className="flex gap-2">
-            <Textarea
-              data-testid="input-feedback"
-              placeholder="transmit intel..."
-              value={feedbackContent}
-              onChange={(e) => setFeedbackContent(e.target.value)}
-              className="min-h-[56px] resize-none text-xs bg-background border-white/8 focus:border-white/20 rounded-none flex-1 font-mono"
-              maxLength={2000}
-            />
-            <Button
-              onClick={() => feedbackMutation.mutate()}
-              disabled={!feedbackContent.trim() || feedbackMutation.isPending}
-              size="icon"
-              data-testid="button-submit-feedback"
-              className="shrink-0 self-end rounded-none"
-            >
-              <Send className={`w-3.5 h-3.5 ${feedbackMutation.isPending ? "animate-pulse" : ""}`} />
-            </Button>
-          </div>
+
+          {!isLoggedIn ? (
+            <div className="border border-white/10 px-3 py-3 text-xs text-muted-foreground font-mono flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5" />
+              login required for upvoting profiles and resume rating
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => upvoteMutation.mutate()}
+                  disabled={upvoteMutation.isPending || Boolean(upvoteStatus?.hasUpvoted)}
+                  size="sm"
+                  data-testid="button-upvote"
+                  className="rounded-none text-xs font-mono"
+                >
+                  <ThumbsUp className="w-3.5 h-3.5 mr-1" />
+                  {upvoteStatus?.hasUpvoted ? "upvoted" : "upvote profile"}
+                </Button>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  votes: {upvoteStatus?.upvoteCount ?? student.upvoteCount}
+                </span>
+              </div>
+
+              <div className="flex gap-2 items-center">
+                <Input
+                  type="file"
+                  data-testid="input-resume-file"
+                  className="rounded-none text-xs font-mono border-white/10"
+                  onChange={(e) => setResumeFile(e.target.files?.[0] ?? null)}
+                />
+                <Button
+                  onClick={() => resumeRatingMutation.mutate()}
+                  disabled={!resumeFile || resumeRatingMutation.isPending}
+                  size="sm"
+                  data-testid="button-rate-resume"
+                  className="rounded-none text-xs font-mono"
+                >
+                  {resumeRatingMutation.isPending ? "rating..." : "rate resume"}
+                </Button>
+                <Button
+                  onClick={() => resumeUploadMutation.mutate()}
+                  disabled={!resumeFile || resumeUploadMutation.isPending}
+                  size="sm"
+                  data-testid="button-upload-resume"
+                  className="rounded-none text-xs font-mono"
+                  variant="outline"
+                >
+                  {resumeUploadMutation.isPending ? "uploading..." : "upload profile resume"}
+                </Button>
+              </div>
+
+              <div className="border border-white/10 p-3 font-mono space-y-2">
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground">profile resumes</div>
+                {profileResumes && profileResumes.length > 0 ? (
+                  <div className="space-y-2">
+                    {profileResumes.map((resume) => (
+                      <div key={resume.id} className="flex items-center justify-between gap-2 border border-white/5 p-2">
+                        <div className="min-w-0">
+                          <div className="text-xs truncate">{resume.fileName}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            by @{resume.uploadedBy} • {(resume.sizeBytes / 1024).toFixed(1)} KB
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="rounded-none text-xs font-mono"
+                          onClick={() => downloadResume(resume.id)}
+                          data-testid={`button-download-resume-${resume.id}`}
+                        >
+                          <Download className="w-3.5 h-3.5 mr-1" />
+                          download
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">no resumes uploaded yet</div>
+                )}
+              </div>
+
+              {latestResumeRating && (
+                <div className="border border-white/10 p-3 font-mono space-y-2">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground">latest rating</div>
+                  <div className="text-sm font-bold">{latestResumeRating.rating}/100</div>
+                  <p className="text-xs text-muted-foreground">{latestResumeRating.summary}</p>
+                  <div className="space-y-1">
+                    {latestResumeRating.improvementFactors.map((factor, idx) => (
+                      <div key={idx} className="text-xs text-muted-foreground">- {factor}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </motion.div>
       </div>
     </div>

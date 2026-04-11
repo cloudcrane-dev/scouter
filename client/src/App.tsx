@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home";
 import StudentPage from "@/pages/student";
 import LeaderboardPage from "@/pages/leaderboard";
+import AuthControls from "@/components/auth-controls";
 
 import { Search, Trophy } from "lucide-react";
 
@@ -61,6 +62,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <AuthControls />
         <div className="scanline" />
         <div className="pb-16">
           <Router />

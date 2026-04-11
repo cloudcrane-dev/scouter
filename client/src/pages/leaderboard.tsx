@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trophy, Eye, MessageSquare, ArrowLeft } from "lucide-react";
+import { Trophy, Eye, ThumbsUp, ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Student } from "@shared/schema";
 
@@ -12,7 +12,7 @@ function getInitials(name: string) {
 }
 
 export default function LeaderboardPage() {
-  const [sortBy, setSortBy] = useState<"searches" | "feedback">("searches");
+  const [sortBy, setSortBy] = useState<"searches" | "upvotes">("searches");
   const [, navigate] = useLocation();
 
   const { data: leaderboard, isLoading } = useQuery<Student[]>({
@@ -68,16 +68,16 @@ export default function LeaderboardPage() {
             views
           </button>
           <button
-            onClick={() => setSortBy("feedback")}
-            data-testid="button-sort-feedback"
+            onClick={() => setSortBy("upvotes")}
+            data-testid="button-sort-upvotes"
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-[10px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer ${
-              sortBy === "feedback"
+              sortBy === "upvotes"
                 ? "bg-foreground text-background"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            <MessageSquare className="w-3 h-3" />
-            intel
+            <ThumbsUp className="w-3 h-3" />
+            upvotes
           </button>
         </motion.div>
 
@@ -130,8 +130,8 @@ export default function LeaderboardPage() {
                       {student.searchCount}
                     </span>
                     <span className="flex items-center gap-1">
-                      <MessageSquare className="w-3 h-3" />
-                      {student.feedbackCount}
+                      <ThumbsUp className="w-3 h-3" />
+                      {student.upvoteCount}
                     </span>
                   </div>
                 </div>

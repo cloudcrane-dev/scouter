@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import OpenAI from "openai";
@@ -44,17 +44,15 @@ async function searchTavily(query: string): Promise<string> {
 
 async function generateAIAnalysis(
   studentName: string,
-  tavilyContext: string,
-  feedbackContext: string
+  tavilyContext: string
 ): Promise<string> {
-  const systemPrompt = `You are an intelligent student profiling assistant for IIT Jodhpur. Given information about a student from web searches and peer feedback, provide a comprehensive analysis including:
+  const systemPrompt = `You are an intelligent student profiling assistant for IIT Jodhpur. Given information about a student from web searches, provide a comprehensive analysis including:
 
 1. **Overview**: A brief introduction about the person
 2. **Strengths**: Key strengths based on available information
 3. **Areas of Interest**: Academic or extracurricular interests
-4. **Notable Achievements**: Any achievements found online or mentioned in feedback
-5. **Peer Insights**: Summary of what peers say about them (if feedback available)
-6. **Overall Impression**: A balanced, respectful summary
+4. **Notable Achievements**: Any achievements found online
+5. **Overall Impression**: A balanced, respectful summary
 
 Be factual and respectful. If information is limited, say so honestly. Never fabricate information. Format using markdown.`;
 
@@ -64,9 +62,6 @@ Be factual and respectful. If information is limited, say so honestly. Never fab
 
 **Web Search Results:**
 ${tavilyContext || "No web results available."}
-
-**Peer Feedback:**
-${feedbackContext || "No peer feedback available yet."}
 
 Please provide a detailed, insightful analysis.`;
 
@@ -80,6 +75,49 @@ Please provide a detailed, insightful analysis.`;
   });
 
   return response.choices[0]?.message?.content || "Unable to generate analysis.";
+}
+
+type ResumeRatingResult = {
+  rating: number;
+  summary: string;
+  improvementFactors: string[];
+};
+
+async function generateResumeRating(resumeText: string): Promise<ResumeRatingResult> {
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.2",
+    messages: [
+      {
+        role: "system",
+        content: "You are a resume reviewer. Return strict JSON only with keys: rating (0-100 integer), summary (string), improvementFactors (array of 3-8 short actionable strings)."
+      },
+      {
+        role: "user",
+        content: `Review this resume and score it:\n\n${resumeText}`,
+      },
+    ],
+    max_completion_tokens: 1200,
+  });
+
+  const raw = response.choices[0]?.message?.content?.trim() || "";
+  const jsonText = raw.startsWith("{") ? raw : raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1);
+  const parsed = JSON.parse(jsonText);
+
+  const rating = Math.max(0, Math.min(100, Math.round(Number(parsed.rating) || 0)));
+  const summary = String(parsed.summary || "No summary available.").slice(0, 1200);
+  const improvementFactors = Array.isArray(parsed.improvementFactors)
+    ? parsed.improvementFactors.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
+    : [];
+
+  return {
+    rating,
+    summary,
+    improvementFactors,
+  };
+}
+
+function requireAuth(req: Request): { handle: string; displayName: string } | null {
+  return req.session.user ?? null;
 }
 
 const DAILY_SEARCH_LIMIT = 200;
@@ -110,6 +148,41 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.get("/api/auth/me", (req, res) => {
+    if (!req.session.user) {
+      return res.status(401).json({ loggedIn: false });
+    }
+    return res.json({ loggedIn: true, user: req.session.user });
+  });
+
+  app.post("/api/auth/login", (req, res) => {
+    const rawHandle = typeof req.body?.handle === "string" ? req.body.handle.trim() : "";
+    if (!rawHandle) {
+      return res.status(400).json({ error: "Handle is required" });
+    }
+    const normalized = rawHandle.toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 32);
+    if (!normalized) {
+      return res.status(400).json({ error: "Handle must include letters or numbers" });
+    }
+
+    req.session.user = {
+      handle: normalized,
+      displayName: rawHandle.slice(0, 40),
+    };
+
+    return res.json({ loggedIn: true, user: req.session.user });
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Failed to logout" });
+      }
+      res.clearCookie("connect.sid");
+      return res.json({ loggedIn: false });
+    });
+  });
 
   app.get("/api/search-limit", (_req, res) => {
     res.json(getDailySearchInfo());
@@ -166,25 +239,18 @@ export async function registerRoutes(
       const student = await storage.getStudent(id);
       if (!student) return res.status(404).json({ error: "Student not found" });
 
-      const currentFeedback = await storage.getFeedback(id);
       const cachedResponse = await storage.getCachedResponse(id);
 
-      if (cachedResponse && cachedResponse.feedbackCountAtGeneration === student.feedbackCount) {
+      if (cachedResponse) {
         return res.json({ analysis: cachedResponse.response, cached: true });
       }
 
       const tavilyQuery = `${student.name} IIT Jodhpur`;
       const tavilyContext = await searchTavily(tavilyQuery);
 
-      const feedbackContext = currentFeedback.length > 0
-        ? currentFeedback.map((f, i) =>
-            `Feedback ${i + 1}${f.authorName ? ` (by ${f.authorName})` : ""}: ${f.content}`
-          ).join("\n")
-        : "";
+      const analysis = await generateAIAnalysis(student.name, tavilyContext);
 
-      const analysis = await generateAIAnalysis(student.name, tavilyContext, feedbackContext);
-
-      await storage.saveCachedResponse(id, analysis, student.feedbackCount);
+      await storage.saveCachedResponse(id, analysis);
 
       res.json({ analysis, cached: false });
     } catch (error) {
@@ -193,46 +259,232 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/students/:id/feedback", async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
-      const feedbackList = await storage.getFeedback(id);
-      res.json(feedbackList);
-    } catch (error) {
-      console.error("Get feedback error:", error);
-      res.status(500).json({ error: "Failed to get feedback" });
-    }
-  });
-
-  app.post("/api/students/:id/feedback", async (req, res) => {
+  app.get("/api/students/:id/upvote-status", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const student = await storage.getStudent(id);
       if (!student) return res.status(404).json({ error: "Student not found" });
-      const { content, authorName } = req.body;
-      if (!content || typeof content !== "string" || content.trim().length === 0) {
-        return res.status(400).json({ error: "Feedback content is required" });
-      }
-      if (content.trim().length > 2000) {
-        return res.status(400).json({ error: "Feedback must be under 2000 characters" });
-      }
-      const fb = await storage.addFeedback({
-        studentId: id,
-        content: content.trim(),
-        authorName: typeof authorName === "string" ? authorName.trim().slice(0, 100) || null : null,
-      });
-      res.status(201).json(fb);
+
+      const user = requireAuth(req);
+      const hasUpvoted = user ? await storage.hasUpvoted(id, user.handle) : false;
+      res.json({ upvoteCount: student.upvoteCount, hasUpvoted });
     } catch (error) {
-      console.error("Add feedback error:", error);
-      res.status(500).json({ error: "Failed to add feedback" });
+      console.error("Upvote status error:", error);
+      res.status(500).json({ error: "Failed to get upvote status" });
+    }
+  });
+
+  app.post("/api/students/:id/upvote", async (req, res) => {
+    try {
+      const user = requireAuth(req);
+      if (!user) return res.status(401).json({ error: "Login required" });
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const student = await storage.getStudent(id);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const hasUpvoted = await storage.hasUpvoted(id, user.handle);
+      if (hasUpvoted) {
+        return res.status(409).json({ error: "Already upvoted" });
+      }
+
+      await storage.addUpvote({
+        studentId: id,
+        voterHandle: user.handle,
+      });
+
+      const updated = await storage.getStudent(id);
+      return res.status(201).json({ success: true, upvoteCount: updated?.upvoteCount ?? student.upvoteCount + 1 });
+    } catch (error) {
+      console.error("Upvote error:", error);
+      res.status(500).json({ error: "Failed to upvote profile" });
+    }
+  });
+
+  app.post("/api/students/:id/resume-rating", async (req, res) => {
+    try {
+      const user = requireAuth(req);
+      if (!user) return res.status(401).json({ error: "Login required" });
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const student = await storage.getStudent(id);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const { resumeText, fileName } = req.body;
+      if (!resumeText || typeof resumeText !== "string") {
+        return res.status(400).json({ error: "Resume content is required" });
+      }
+      const trimmedResume = resumeText.trim();
+      if (trimmedResume.length < 100) {
+        return res.status(400).json({ error: "Resume content is too short" });
+      }
+      if (trimmedResume.length > 30000) {
+        return res.status(400).json({ error: "Resume content is too long" });
+      }
+
+      const aiRating = await generateResumeRating(trimmedResume);
+      const created = await storage.addResumeRating({
+        studentId: id,
+        reviewerHandle: user.handle,
+        fileName: typeof fileName === "string" ? fileName.slice(0, 255) : "resume.txt",
+        resumeText: trimmedResume,
+        rating: aiRating.rating,
+        summary: aiRating.summary,
+        improvementFactors: JSON.stringify(aiRating.improvementFactors),
+      });
+
+      res.status(201).json({
+        id: created.id,
+        rating: created.rating,
+        summary: created.summary,
+        improvementFactors: aiRating.improvementFactors,
+        fileName: created.fileName,
+        createdAt: created.createdAt,
+      });
+    } catch (error) {
+      console.error("Resume rating error:", error);
+      res.status(500).json({ error: "Failed to generate resume rating" });
+    }
+  });
+
+  app.post("/api/students/:id/resumes", async (req, res) => {
+    try {
+      const user = requireAuth(req);
+      if (!user) return res.status(401).json({ error: "Login required" });
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const student = await storage.getStudent(id);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const { fileName, mimeType, contentBase64, sizeBytes } = req.body;
+      if (typeof fileName !== "string" || !fileName.trim()) {
+        return res.status(400).json({ error: "fileName is required" });
+      }
+      if (typeof mimeType !== "string" || !mimeType.trim()) {
+        return res.status(400).json({ error: "mimeType is required" });
+      }
+      if (typeof contentBase64 !== "string" || !contentBase64.trim()) {
+        return res.status(400).json({ error: "contentBase64 is required" });
+      }
+      const parsedSize = Number(sizeBytes);
+      if (!Number.isFinite(parsedSize) || parsedSize <= 0 || parsedSize > 8 * 1024 * 1024) {
+        return res.status(400).json({ error: "Resume must be under 8MB" });
+      }
+
+      const created = await storage.addStudentResume({
+        studentId: id,
+        fileName: fileName.trim().slice(0, 255),
+        mimeType: mimeType.trim().slice(0, 120),
+        contentBase64: contentBase64.trim(),
+        sizeBytes: Math.round(parsedSize),
+        uploadedBy: user.handle,
+      });
+
+      return res.status(201).json({
+        id: created.id,
+        fileName: created.fileName,
+        mimeType: created.mimeType,
+        sizeBytes: created.sizeBytes,
+        uploadedBy: created.uploadedBy,
+        createdAt: created.createdAt,
+      });
+    } catch (error) {
+      console.error("Resume upload error:", error);
+      return res.status(500).json({ error: "Failed to upload resume" });
+    }
+  });
+
+  app.get("/api/students/:id/resumes", async (req, res) => {
+    try {
+      const user = requireAuth(req);
+      if (!user) return res.status(401).json({ error: "Login required" });
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const student = await storage.getStudent(id);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const resumes = await storage.listStudentResumes(id);
+      return res.json(
+        resumes.map((resume) => ({
+          id: resume.id,
+          fileName: resume.fileName,
+          mimeType: resume.mimeType,
+          sizeBytes: resume.sizeBytes,
+          uploadedBy: resume.uploadedBy,
+          createdAt: resume.createdAt,
+        }))
+      );
+    } catch (error) {
+      console.error("List resumes error:", error);
+      return res.status(500).json({ error: "Failed to list resumes" });
+    }
+  });
+
+  app.get("/api/students/:id/resumes/:resumeId/download", async (req, res) => {
+    try {
+      const user = requireAuth(req);
+      if (!user) return res.status(401).json({ error: "Login required" });
+
+      const id = parseInt(req.params.id);
+      const resumeId = parseInt(req.params.resumeId);
+      if (isNaN(id) || isNaN(resumeId)) {
+        return res.status(400).json({ error: "Invalid student or resume ID" });
+      }
+
+      const student = await storage.getStudent(id);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const resume = await storage.getStudentResumeById(id, resumeId);
+      if (!resume) return res.status(404).json({ error: "Resume not found" });
+
+      const fileBuffer = Buffer.from(resume.contentBase64, "base64");
+      res.setHeader("Content-Type", resume.mimeType || "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename=\"${resume.fileName.replace(/\"/g, "")}\"`);
+      res.setHeader("Content-Length", String(fileBuffer.length));
+      return res.send(fileBuffer);
+    } catch (error) {
+      console.error("Download resume error:", error);
+      return res.status(500).json({ error: "Failed to download resume" });
+    }
+  });
+
+  app.get("/api/students/:id/resume-rating/me", async (req, res) => {
+    try {
+      const user = requireAuth(req);
+      if (!user) return res.status(401).json({ error: "Login required" });
+
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const student = await storage.getStudent(id);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const latest = await storage.getLatestResumeRating(id, user.handle);
+      if (!latest) {
+        return res.json(null);
+      }
+
+      return res.json({
+        id: latest.id,
+        rating: latest.rating,
+        summary: latest.summary,
+        improvementFactors: JSON.parse(latest.improvementFactors) as string[],
+        fileName: latest.fileName,
+        createdAt: latest.createdAt,
+      });
+    } catch (error) {
+      console.error("Latest resume rating error:", error);
+      return res.status(500).json({ error: "Failed to get latest resume rating" });
     }
   });
 
   app.get("/api/leaderboard", async (req, res) => {
     try {
-      const sortBy = (req.query.sort as string) === "feedback" ? "feedback" : "searches";
+      const sortBy = (req.query.sort as string) === "upvotes" ? "upvotes" : "searches";
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
       const leaderboard = await storage.getLeaderboard(sortBy, limit);
       res.json(leaderboard);
