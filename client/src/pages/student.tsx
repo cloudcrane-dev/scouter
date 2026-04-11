@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Eye, MessageSquare, Mail, Sparkles,
   Send, RefreshCw, User, Terminal, ShieldCheck, ExternalLink,
-  ThumbsUp, ThumbsDown, Check, Smile, Star,
+  ThumbsUp, ThumbsDown, Check, Heart, Download, FileText,
 } from "lucide-react";
 import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -15,7 +15,6 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Student } from "@shared/schema";
-import { PERSONALITY_TRAITS } from "@shared/schema";
 import { parseRollNumber, classifyIITJEmail, formatParsedRoll } from "@shared/iitj";
 
 function getInitials(name: string) {
@@ -174,7 +173,6 @@ export default function StudentPage() {
   const [userReaction, setUserReaction] = useState<"up" | "down" | null>(null);
   const [selectedChips, setSelectedChips] = useState<string[]>([]);
   const [chipSubmitted, setChipSubmitted] = useState(false);
-  const [pendingRatings, setPendingRatings] = useState<Record<string, number>>({});
   const analysisLoadedAtRef = useRef<number | null>(null);
   const currentCachedResponseIdRef = useRef<number | null>(null);
 
@@ -195,26 +193,28 @@ export default function StudentPage() {
     enabled: id > 0,
   });
 
-  type PersonalityTrait = { key: string; label: string; emoji: string; avgScore: number };
-  type PersonalityData = { traits: PersonalityTrait[]; totalScore: number; raterCount: number; myRating: Record<string, number> | null };
-  const { data: personalityData, refetch: refetchPersonality } = useQuery<PersonalityData>({
-    queryKey: ["/api/students", id.toString(), "personality"],
-    enabled: id > 0,
+  const { data: resumeMeta } = useQuery<{ exists: boolean; fileName?: string; mimeType?: string; score?: number; improvements?: string[] }>({
+    queryKey: ["/api/students", id.toString(), "resume-meta"],
+    enabled: isAuthenticated && id > 0,
   });
 
-  const personalityMutation = useMutation({
-    mutationFn: async (ratings: { trait: string; score: number }[]) => {
-      const res = await apiRequest("POST", `/api/students/${id}/personality-rate`, { ratings });
-      return res.json();
+  const { data: upvoteStatus } = useQuery<{ upvoted: boolean; upvoteCount: number }>({
+    queryKey: ["/api/students", id.toString(), "upvote-status"],
+    enabled: isAuthenticated && id > 0,
+  });
+
+  const upvoteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/students/${id}/upvote`);
+      return res.json() as Promise<{ upvoted: boolean; upvoteCount: number }>;
     },
-    onSuccess: () => {
-      setPendingRatings({});
-      refetchPersonality();
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/students", id.toString(), "upvote-status"], data);
+      queryClient.invalidateQueries({ queryKey: ["/api/students", id.toString()] });
       queryClient.invalidateQueries({ queryKey: ["/api/leaderboard"] });
-      toast({ title: "vibe recorded", description: "personality ratings submitted." });
     },
-    onError: (err: any) => {
-      toast({ title: "error", description: err?.message ?? "failed to submit ratings.", variant: "destructive" });
+    onError: () => {
+      toast({ title: "error", description: "failed to update upvote.", variant: "destructive" });
     },
   });
 
@@ -658,103 +658,86 @@ export default function StudentPage() {
           </AnimatePresence>
         </motion.div>
 
-        {/* Personality rating section */}
-        {student.rollNumber !== "M25DE1021" && (
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.15 }}
           className="border border-white/8 bg-card p-5 mb-3"
-          data-testid="section-personality"
+          data-testid="section-resume-upvote"
         >
-          <div className="flex items-center gap-2 mb-4 font-mono">
-            <Smile className="w-3.5 h-3.5 text-foreground" />
-            <h2 className="font-semibold text-xs uppercase tracking-widest">personality</h2>
-            {personalityData && personalityData.raterCount >= 1 && (() => {
-              const best = personalityData.traits.filter(t => t.avgScore > 0).sort((a, b) => b.avgScore - a.avgScore)[0];
-              return (
-                <span className="ml-auto text-[10px] font-mono text-muted-foreground tabular-nums">
-                  {best ? `${best.emoji} ${best.label}` : ""} · {personalityData.raterCount} rater{personalityData.raterCount !== 1 ? "s" : ""}
-                </span>
-              );
-            })()}
+          <div className="flex items-center gap-2 mb-3 font-mono">
+            <FileText className="w-3.5 h-3.5 text-foreground" />
+            <h2 className="font-semibold text-xs uppercase tracking-widest">resume + upvotes</h2>
           </div>
 
-          {personalityData && personalityData.raterCount >= 1 ? (
-            <div className="space-y-2 mb-4">
-              {personalityData.traits.filter(t => t.avgScore > 0).sort((a, b) => b.avgScore - a.avgScore).map(t => (
-                <div key={t.key} className="flex items-center gap-2" data-testid={`personality-bar-${t.key}`}>
-                  <span className="text-[10px] font-mono text-muted-foreground w-28 shrink-0">{t.emoji} {t.label}</span>
-                  <div className="flex-1 h-1 bg-white/8 overflow-hidden">
-                    <div
-                      className="h-full bg-foreground/60 transition-all duration-500"
-                      style={{ width: `${(t.avgScore / 5) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] font-mono text-muted-foreground/60 w-6 text-right tabular-nums">
-                    {t.avgScore.toFixed(1)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
+          {isAuthenticated ? (
+            <div className="space-y-3">
+              {user?.studentId !== id && (
+                <button
+                  onClick={() => upvoteMutation.mutate()}
+                  data-testid="button-upvote"
+                  disabled={upvoteMutation.isPending}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 border text-[10px] font-mono transition-all ${
+                    upvoteStatus?.upvoted ? "border-red-400/40 text-red-300 bg-red-500/10" : "border-white/15 text-muted-foreground hover:text-foreground hover:border-white/30"
+                  }`}
+                >
+                  <Heart className="w-3.5 h-3.5" fill={upvoteStatus?.upvoted ? "currentColor" : "none"} />
+                  {upvoteStatus?.upvoted ? "upvoted" : "upvote profile"}
+                  <span className="text-muted-foreground">({upvoteStatus?.upvoteCount ?? student.upvoteCount ?? 0})</span>
+                </button>
+              )}
 
-          {/* Rating UI — auth only, non-self */}
-          {isAuthenticated && user?.studentId !== id ? (
-            (() => {
-              const myRating = personalityData?.myRating;
-              const activeRatings = Object.keys(pendingRatings).length > 0 ? pendingRatings : (myRating ?? {});
-              const hasChanges = Object.keys(pendingRatings).length > 0;
-              return (
-                <div className="space-y-2 pt-2 border-t border-white/8">
-                  <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-2">
-                    {myRating ? "// your rating (tap stars to update)" : "// rate their vibe (tap stars)"}
+              {resumeMeta?.exists ? (
+                <div className="space-y-2 border border-white/8 p-3">
+                  <p className="text-[10px] font-mono text-muted-foreground">
+                    resume available: <span className="text-foreground">{resumeMeta.fileName}</span>
                   </p>
-                  {PERSONALITY_TRAITS.map(t => {
-                    const current = activeRatings[t.key] ?? 0;
-                    return (
-                      <div key={t.key} className="flex items-center gap-2" data-testid={`rate-trait-${t.key}`}>
-                        <span className="text-[10px] font-mono text-muted-foreground w-28 shrink-0">{t.emoji} {t.label}</span>
-                        <div className="flex gap-0.5">
-                          {[1, 2, 3, 4, 5].map(star => (
-                            <button
-                              key={star}
-                              onClick={() => setPendingRatings(prev => ({ ...prev, [t.key]: star === current ? 0 : star }))}
-                              data-testid={`star-${t.key}-${star}`}
-                              className={`w-4 h-4 transition-colors duration-100 cursor-pointer ${star <= current ? "text-yellow-400" : "text-white/15 hover:text-white/40"}`}
-                            >
-                              <Star className="w-3.5 h-3.5" fill={star <= current ? "currentColor" : "none"} />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {hasChanges && (
-                    <button
-                      onClick={() => personalityMutation.mutate(
-                        Object.entries(pendingRatings).filter(([, v]) => v > 0).map(([trait, score]) => ({ trait, score }))
-                      )}
-                      disabled={personalityMutation.isPending || Object.values(pendingRatings).every(v => v === 0)}
-                      data-testid="button-submit-personality"
-                      className="mt-2 text-[10px] font-mono px-3 py-1.5 border border-white/15 text-muted-foreground hover:text-foreground hover:border-white/30 transition-all disabled:opacity-40"
-                    >
-                      {personalityMutation.isPending ? "saving..." : "submit rating"}
-                    </button>
+                  {typeof resumeMeta.score === "number" && (
+                    <p className="text-[10px] font-mono text-muted-foreground">
+                      resume score: <span className="text-foreground font-semibold">{resumeMeta.score}/100</span>
+                    </p>
                   )}
+                  {!!resumeMeta.improvements?.length && (
+                    <div className="text-[10px] font-mono text-muted-foreground space-y-1">
+                      <p className="uppercase tracking-wider text-muted-foreground/60">improvement factors</p>
+                      {resumeMeta.improvements.slice(0, 4).map((item, idx) => (
+                        <p key={idx}>- {item}</p>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <a
+                      href={`/api/students/${id}/resume/download`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-white/15 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:border-white/30"
+                      data-testid="button-view-resume"
+                    >
+                      <FileText className="w-3 h-3" />
+                      view resume
+                    </a>
+                    <a
+                      href={`/api/students/${id}/resume/download?download=true`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-white/15 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:border-white/30"
+                      data-testid="button-download-resume"
+                    >
+                      <Download className="w-3 h-3" />
+                      download
+                    </a>
+                  </div>
                 </div>
-              );
-            })()
-          ) : !isAuthenticated ? (
-            <div className="pt-3 border-t border-white/8 flex items-center gap-2">
-              <Smile className="w-3 h-3 text-muted-foreground/40" />
-              <p className="text-[10px] font-mono text-muted-foreground/50">
-                log in with your @iitj.ac.in account to rate their personality
-              </p>
+              ) : (
+                <p className="text-[10px] font-mono text-muted-foreground/60">
+                  no resume uploaded yet for this profile.
+                </p>
+              )}
             </div>
-          ) : null}
+          ) : (
+            <p className="text-[10px] font-mono text-muted-foreground/60">
+              login required to upvote profiles and view/download resumes.
+            </p>
+          )}
         </motion.div>
-        )}
 
         <motion.div
           initial={{ opacity: 0, y: 16 }}

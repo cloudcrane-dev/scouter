@@ -3,19 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Eye, Terminal, Shield, MessageSquare, Trophy, CheckCircle, Smile } from "lucide-react";
+import { Search, Eye, Terminal, Shield, MessageSquare, Trophy, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Student } from "@shared/schema";
-import { PERSONALITY_TRAITS } from "@shared/schema";
 
 type LeaderboardEntry = Student & { verified?: boolean };
-type PersonalityEntry = {
-  id: number; name: string; email: string; rollNumber: string | null;
-  pictureUrl: string | null; searchCount: number; feedbackCount: number; profileStrength: number | null;
-  raterCount: number; verified: boolean;
-  dominantTrait: { key: string; label: string; emoji: string; score: number } | null;
-  traitScore: number;
-};
 
 function getInitials(name: string) {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -27,9 +19,8 @@ export default function HomePage() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [limitHit, setLimitHit] = useState(false);
-  const [sortBy, setSortBy] = useState<"searches" | "strength" | "personality">("strength");
+  const [sortBy, setSortBy] = useState<"searches" | "strength">("strength");
   const [leaderboardLimit, setLeaderboardLimit] = useState(20);
-  const [traitFilter, setTraitFilter] = useState<string | null>(null);
   const [, navigate] = useLocation();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -71,10 +62,8 @@ export default function HomePage() {
     refetchInterval: 60000,
   });
 
-  const leaderboardQs = sortBy === "personality" && traitFilter
-    ? `?sort=${sortBy}&trait=${traitFilter}&limit=${leaderboardLimit}`
-    : `?sort=${sortBy}&limit=${leaderboardLimit}`;
-  const { data: leaderboard, isLoading: leaderboardLoading } = useQuery<(LeaderboardEntry | PersonalityEntry)[]>({
+  const leaderboardQs = `?sort=${sortBy}&limit=${leaderboardLimit}`;
+  const { data: leaderboard, isLoading: leaderboardLoading } = useQuery<LeaderboardEntry[]>({
     queryKey: ["/api/leaderboard", leaderboardQs],
   });
 
@@ -292,45 +281,21 @@ export default function HomePage() {
                   <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">top ranked</span>
                 </div>
                 <div className="flex items-center border border-white/8 overflow-hidden">
-                  {(["strength", "searches", "personality"] as const).map((tab, i) => (
+                  {(["strength", "searches"] as const).map((tab, i) => (
                     <button
                       key={tab}
-                      onClick={() => { setSortBy(tab); setLeaderboardLimit(20); if (tab !== "personality") setTraitFilter(null); }}
+                      onClick={() => { setSortBy(tab); setLeaderboardLimit(20); }}
                       data-testid={`button-sort-${tab}`}
                       className={`flex items-center gap-1 px-2.5 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all duration-200 cursor-pointer ${i > 0 ? "border-l border-white/8" : ""} ${
                         sortBy === tab ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       {tab === "searches" && <Eye className="w-2.5 h-2.5" />}
-                      {tab === "personality" && <Smile className="w-2.5 h-2.5" />}
-                      {tab === "strength" ? "strength" : tab === "searches" ? "views" : "vibe"}
+                      {tab === "strength" ? "strength" : "views"}
                     </button>
                   ))}
                 </div>
               </div>
-
-              {sortBy === "personality" && (
-                <div className="flex items-center gap-1 mt-2 flex-wrap">
-                  <button
-                    onClick={() => setTraitFilter(null)}
-                    data-testid="trait-filter-all"
-                    className={`px-2 py-1 text-[10px] font-mono transition-all duration-150 cursor-pointer border ${
-                      !traitFilter ? "border-foreground/40 text-foreground bg-white/5" : "border-white/8 text-muted-foreground/50 hover:text-muted-foreground hover:border-white/15"
-                    }`}
-                  >all</button>
-                  {PERSONALITY_TRAITS.map(t => (
-                    <button
-                      key={t.key}
-                      onClick={() => setTraitFilter(traitFilter === t.key ? null : t.key)}
-                      data-testid={`trait-filter-${t.key}`}
-                      title={t.label}
-                      className={`px-1.5 py-1 text-sm transition-all duration-150 cursor-pointer border ${
-                        traitFilter === t.key ? "border-foreground/40 bg-white/5 scale-110" : "border-white/8 opacity-50 hover:opacity-100 hover:border-white/15"
-                      }`}
-                    >{t.emoji}</button>
-                  ))}
-                </div>
-              )}
 
               {/* Rows */}
               <div className="border border-white/8">
@@ -348,8 +313,7 @@ export default function HomePage() {
                   ))
                 ) : leaderboard && leaderboard.length > 0 ? (
                   leaderboard.map((student, index) => {
-                    const pe = sortBy === "personality" ? (student as PersonalityEntry) : null;
-                    const le = sortBy !== "personality" ? (student as LeaderboardEntry) : null;
+                    const le = student as LeaderboardEntry;
                     return (
                     <motion.div
                       key={student.id}
@@ -386,25 +350,14 @@ export default function HomePage() {
                       <div className="flex-1 min-w-0 text-left">
                         <div className="flex items-center gap-1">
                           <p className="font-mono text-xs tracking-wide group-hover:text-foreground transition-colors duration-150 truncate">{student.name}</p>
-                          {(le?.verified || pe?.verified) && (
-                            <CheckCircle className="w-2.5 h-2.5 text-blue-400 shrink-0" title="Verified IITJ student" />
+                          {le?.verified && (
+                            <CheckCircle className="w-2.5 h-2.5 text-blue-400 shrink-0" />
                           )}
                         </div>
-                        {pe && pe.dominantTrait ? (
-                          <p className="text-[10px] text-muted-foreground font-mono">
-                            {pe.dominantTrait.emoji} {pe.dominantTrait.label}
-                          </p>
-                        ) : (
-                          <p className="text-[10px] text-muted-foreground truncate font-mono">{student.rollNumber ?? student.email}</p>
-                        )}
+                        <p className="text-[10px] text-muted-foreground truncate font-mono">{student.rollNumber ?? student.email}</p>
                       </div>
                       <div className="flex items-center gap-2.5 shrink-0 text-[10px] text-muted-foreground font-mono">
-                        {pe ? (
-                          <span className="flex items-center gap-0.5 font-bold text-foreground tabular-nums text-xs">
-                            {pe.traitScore.toFixed(1)}
-                            <span className="text-[8px] text-muted-foreground font-normal">/5</span>
-                          </span>
-                        ) : sortBy === "strength" && student.profileStrength != null ? (
+                        {sortBy === "strength" && student.profileStrength != null ? (
                           <span className="flex items-center gap-0.5 font-bold text-foreground tabular-nums text-xs">
                             {student.profileStrength}
                             <span className="text-[8px] text-muted-foreground font-normal">/100</span>

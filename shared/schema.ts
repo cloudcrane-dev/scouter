@@ -16,6 +16,7 @@ export const students = pgTable("students", {
   searchCount: integer("search_count").default(0).notNull(),
   feedbackCount: integer("feedback_count").default(0).notNull(),
   profileStrength: integer("profile_strength"),
+  upvoteCount: integer("upvote_count").default(0).notNull(),
 });
 
 export const users = pgTable("users", {
@@ -76,10 +77,30 @@ export const analysisReactions = pgTable("analysis_reactions", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const resumes = pgTable("resumes", {
+  id: serial("id").primaryKey(),
+  studentId: integer("student_id").notNull().references(() => students.id, { onDelete: "cascade" }).unique(),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  data: text("data").notNull(),
+  score: integer("score"),
+  improvements: text("improvements"),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const upvotes = pgTable("upvotes", {
+  id: serial("id").primaryKey(),
+  voterId: integer("voter_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  studentId: integer("student_id").notNull().references(() => students.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => [unique().on(t.voterId, t.studentId)]);
+
 export const studentsRelations = relations(students, ({ many }) => ({
   feedback: many(feedback),
   cachedResponses: many(cachedResponses),
   socialLinks: many(socialLinks),
+  upvotes: many(upvotes),
+  resumes: many(resumes),
 }));
 
 export const usersRelations = relations(users, ({ one }) => ({
@@ -98,29 +119,25 @@ export const cachedResponsesRelations = relations(cachedResponses, ({ one }) => 
   student: one(students, { fields: [cachedResponses.studentId], references: [students.id] }),
 }));
 
-export const personalityRatings = pgTable("personality_ratings", {
-  id: serial("id").primaryKey(),
-  raterId: integer("rater_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  rateeId: integer("ratee_id").notNull().references(() => students.id, { onDelete: "cascade" }),
-  trait: text("trait").notNull(),
-  score: integer("score").notNull(),
-  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-}, (t) => [unique().on(t.raterId, t.rateeId, t.trait)]);
-
 export const analysisReactionsRelations = relations(analysisReactions, ({ one }) => ({
   cachedResponse: one(cachedResponses, { fields: [analysisReactions.cachedResponseId], references: [cachedResponses.id] }),
   student: one(students, { fields: [analysisReactions.studentId], references: [students.id] }),
 }));
 
-export const personalityRatingsRelations = relations(personalityRatings, ({ one }) => ({
-  rater: one(users, { fields: [personalityRatings.raterId], references: [users.id] }),
-  ratee: one(students, { fields: [personalityRatings.rateeId], references: [students.id] }),
+export const resumesRelations = relations(resumes, ({ one }) => ({
+  student: one(students, { fields: [resumes.studentId], references: [students.id] }),
+}));
+
+export const upvotesRelations = relations(upvotes, ({ one }) => ({
+  voter: one(users, { fields: [upvotes.voterId], references: [users.id] }),
+  student: one(students, { fields: [upvotes.studentId], references: [students.id] }),
 }));
 
 export const insertStudentSchema = createInsertSchema(students).omit({
   id: true,
   searchCount: true,
   feedbackCount: true,
+  upvoteCount: true,
 });
 
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({
@@ -141,14 +158,4 @@ export type User = typeof users.$inferSelect;
 export type SocialLink = typeof socialLinks.$inferSelect;
 export type InsertSocialLink = z.infer<typeof insertSocialLinkSchema>;
 export type AnalysisReaction = typeof analysisReactions.$inferSelect;
-export type PersonalityRating = typeof personalityRatings.$inferSelect;
-
-export const PERSONALITY_TRAITS = [
-  { key: "looks",   label: "Looks",   emoji: "😍" },
-  { key: "brains",  label: "Brains",  emoji: "🧠" },
-  { key: "fitness", label: "Fitness", emoji: "💪" },
-  { key: "funny",   label: "Funny",   emoji: "😂" },
-  { key: "charm",   label: "Charm",   emoji: "✨" },
-] as const;
-
-export type PersonalityTraitKey = typeof PERSONALITY_TRAITS[number]["key"];
+export type Upvote = typeof upvotes.$inferSelect;

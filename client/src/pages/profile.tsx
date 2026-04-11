@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, LogOut, Plus, Trash2, Save, User, Link as LinkIcon,
-  ExternalLink, ShieldCheck, Eye, MessageSquare, Camera, Sparkles, Lock,
+  ExternalLink, ShieldCheck, Eye, MessageSquare, Camera, Sparkles, Lock, FileText, Upload,
 } from "lucide-react";
 import { SiGithub, SiLinkedin, SiLeetcode, SiBehance } from "react-icons/si";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -40,6 +40,7 @@ export default function ProfilePage() {
   const [links, setLinks] = useState<LinkEntry[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const resumeInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: studentData } = useQuery<Student>({
@@ -54,6 +55,11 @@ export default function ProfilePage() {
 
   const { data: myInsights, isLoading: insightsLoading } = useQuery<{ id: number; content: string; createdAt: string }[]>({
     queryKey: ["/api/students", user?.studentId?.toString(), "feedback"],
+    enabled: !!user?.studentId,
+  });
+
+  const { data: resumeMeta, isLoading: resumeLoading } = useQuery<{ exists: boolean; fileName?: string; mimeType?: string; score?: number; improvements?: string[] }>({
+    queryKey: ["/api/students", user?.studentId?.toString(), "resume-meta"],
     enabled: !!user?.studentId,
   });
 
@@ -108,6 +114,35 @@ export default function ProfilePage() {
     },
   });
 
+  const resumeMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const data = reader.result as string;
+          const split = data.split(",");
+          resolve(split[1] || "");
+        };
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsDataURL(file);
+      });
+
+      const res = await apiRequest("PUT", `/api/students/${user!.studentId}/resume`, {
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        dataBase64,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students", user?.studentId?.toString(), "resume-meta"] });
+      toast({ title: "resume rated", description: "your resume score and improvements are updated." });
+    },
+    onError: (err: any) => {
+      toast({ title: "error", description: err?.message ?? "failed to upload resume.", variant: "destructive" });
+    },
+  });
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -147,6 +182,21 @@ export default function ProfilePage() {
     updated[index] = { ...updated[index], [field]: value };
     setLinks(updated);
     setHasChanges(true);
+  }
+
+  function handleResumeUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!["application/pdf", "text/plain"].includes(file.type)) {
+      toast({ title: "invalid file", description: "upload a PDF or TXT resume.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      toast({ title: "file too large", description: "max resume size is 3MB.", variant: "destructive" });
+      return;
+    }
+    resumeMutation.mutate(file);
+    e.target.value = "";
   }
 
   if (authLoading) {
@@ -408,6 +458,67 @@ export default function ProfilePage() {
             <p className="text-xs text-muted-foreground font-mono">
               your email wasn't found in the student database. social links require a matching student profile.
             </p>
+          </motion.div>
+        )}
+
+        {user?.studentId && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.15 }}
+            className="border border-white/8 bg-card p-5 mb-3"
+            data-testid="section-resume-rating"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 font-mono">
+                <FileText className="w-3.5 h-3.5 text-foreground" />
+                <h2 className="font-semibold text-xs uppercase tracking-widest">resume rating</h2>
+              </div>
+              <button
+                onClick={() => resumeInputRef.current?.click()}
+                disabled={resumeMutation.isPending}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-white/15 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:border-white/30 disabled:opacity-50"
+                data-testid="button-upload-resume"
+              >
+                <Upload className="w-3 h-3" />
+                {resumeMutation.isPending ? "rating..." : "upload resume"}
+              </button>
+              <input
+                ref={resumeInputRef}
+                type="file"
+                accept="application/pdf,text/plain"
+                className="hidden"
+                onChange={handleResumeUpload}
+                data-testid="input-resume-upload"
+              />
+            </div>
+
+            {resumeLoading ? (
+              <p className="text-xs text-muted-foreground font-mono">loading...</p>
+            ) : resumeMeta?.exists ? (
+              <div className="space-y-2 text-[10px] font-mono text-muted-foreground">
+                <p>
+                  file: <span className="text-foreground">{resumeMeta.fileName}</span>
+                </p>
+                {typeof resumeMeta.score === "number" && (
+                  <p>
+                    score: <span className="text-foreground font-semibold">{resumeMeta.score}/100</span>
+                  </p>
+                )}
+                {!!resumeMeta.improvements?.length && (
+                  <div className="space-y-1">
+                    <p className="uppercase tracking-wider text-muted-foreground/60">improvement factors</p>
+                    {resumeMeta.improvements.map((item, idx) => (
+                      <p key={idx}>- {item}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground font-mono">
+                upload your resume (PDF/TXT) to get an AI score and improvement factors.
+              </p>
+            )}
           </motion.div>
         )}
 

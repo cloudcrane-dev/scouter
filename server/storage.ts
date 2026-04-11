@@ -1,6 +1,5 @@
 import {
-  students, feedback, cachedResponses, users, socialLinks, analyticsEvents, analysisReactions, emailNotifications, personalityRatings,
-  PERSONALITY_TRAITS,
+  students, feedback, cachedResponses, users, socialLinks, analyticsEvents, analysisReactions, emailNotifications, upvotes, resumes,
   type Student, type InsertStudent,
   type Feedback, type InsertFeedback,
   type CachedResponse,
@@ -9,20 +8,16 @@ import {
 } from "@shared/schema";
 
 export type LeaderboardEntry = Student & { verified: boolean };
-export type PersonalityEntry = {
-  id: number; name: string; email: string; rollNumber: string | null;
-  pictureUrl: string | null; searchCount: number; feedbackCount: number; profileStrength: number | null;
-  raterCount: number; verified: boolean;
-  dominantTrait: { key: string; label: string; emoji: string; score: number } | null;
-  traitScore: number;
-};
-export type PersonalityData = {
-  traits: { key: string; label: string; emoji: string; avgScore: number }[];
-  totalScore: number; raterCount: number;
-  myRating: Record<string, number> | null;
+export type StudentResume = {
+  fileName: string;
+  mimeType: string;
+  data: string;
+  score: number | null;
+  improvements: string[];
+  updatedAt: string | null;
 };
 import { db } from "./db";
-import { eq, ilike, or, desc, sql, and, inArray } from "drizzle-orm";
+import { eq, ilike, or, desc, sql, and } from "drizzle-orm";
 import { createHash } from "crypto";
 
 function hashIp(ip: string): string {
@@ -88,9 +83,10 @@ export interface IStorage {
   recordEmailSent(studentId: number, emailType: string, weekKey: string): Promise<void>;
 
   getLeaderboardWithVerified(sortBy: "searches" | "feedback" | "strength", limit?: number): Promise<LeaderboardEntry[]>;
-  submitPersonalityRatings(raterId: number, rateeId: number, ratings: { trait: string; score: number }[]): Promise<void>;
-  getPersonalityData(rateeId: number, raterId?: number): Promise<PersonalityData>;
-  getPersonalityLeaderboard(limit?: number, traitFilter?: string): Promise<PersonalityEntry[]>;
+  saveStudentResume(studentId: number, resume: { fileName: string; mimeType: string; data: string; score: number | null; improvements: string[] }): Promise<void>;
+  getStudentResume(studentId: number): Promise<StudentResume | null>;
+  toggleUpvote(voterId: number, studentId: number): Promise<{ upvoted: boolean; upvoteCount: number }>;
+  getUpvoteStatus(voterId: number, studentId: number): Promise<{ upvoted: boolean; upvoteCount: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -345,126 +341,95 @@ export class DatabaseStorage implements IStorage {
     const rows = await db.select({
       id: students.id, name: students.name, email: students.email, rollNumber: students.rollNumber,
       phone: students.phone, pictureUrl: students.pictureUrl, searchCount: students.searchCount,
-      feedbackCount: students.feedbackCount, profileStrength: students.profileStrength,
+      feedbackCount: students.feedbackCount, profileStrength: students.profileStrength, upvoteCount: students.upvoteCount,
       userId: users.id,
     }).from(students).leftJoin(users, eq(users.studentId, students.id)).where(whereExpr).orderBy(orderExpr).limit(limit);
     return rows.map(({ userId, ...r }) => ({ ...r, verified: userId != null })) as LeaderboardEntry[];
   }
 
-  async submitPersonalityRatings(raterId: number, rateeId: number, ratings: { trait: string; score: number }[]): Promise<void> {
-    const validKeys = new Set(PERSONALITY_TRAITS.map(t => t.key));
-    const valid = ratings.filter(r => validKeys.has(r.trait) && r.score >= 1 && r.score <= 5);
-    if (valid.length === 0) return;
-    await db.insert(personalityRatings)
-      .values(valid.map(r => ({ raterId, rateeId, trait: r.trait, score: r.score })))
-      .onConflictDoUpdate({
-        target: [personalityRatings.raterId, personalityRatings.rateeId, personalityRatings.trait],
-        set: { score: sql`excluded.score`, createdAt: sql`CURRENT_TIMESTAMP` },
-      });
+  async saveStudentResume(studentId: number, resume: { fileName: string; mimeType: string; data: string; score: number | null; improvements: string[] }): Promise<void> {
+    await db.insert(resumes).values({
+      studentId,
+      fileName: resume.fileName,
+      mimeType: resume.mimeType,
+      data: resume.data,
+      score: resume.score,
+      improvements: JSON.stringify(resume.improvements),
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).onConflictDoUpdate({
+      target: resumes.studentId,
+      set: {
+        fileName: resume.fileName,
+        mimeType: resume.mimeType,
+        data: resume.data,
+        score: resume.score,
+        improvements: JSON.stringify(resume.improvements),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      },
+    });
   }
 
-  async getPersonalityData(rateeId: number, raterId?: number): Promise<PersonalityData> {
-    const rows = await db.select({
-      trait: personalityRatings.trait,
-      score: personalityRatings.score,
-      rater: personalityRatings.raterId,
-    }).from(personalityRatings).where(eq(personalityRatings.rateeId, rateeId));
+  async getStudentResume(studentId: number): Promise<StudentResume | null> {
+    const [row] = await db.select({
+      resumeFileName: resumes.fileName,
+      resumeMimeType: resumes.mimeType,
+      resumeData: resumes.data,
+      resumeScore: resumes.score,
+      resumeImprovements: resumes.improvements,
+      updatedAt: resumes.updatedAt,
+    }).from(resumes).where(eq(resumes.studentId, studentId));
 
-    const traitTotals: Record<string, { sum: number; count: number }> = {};
-    const raterSet = new Set<number>();
-    const myRatingMap: Record<string, number> = {};
-
-    for (const row of rows) {
-      raterSet.add(row.rater);
-      if (!traitTotals[row.trait]) traitTotals[row.trait] = { sum: 0, count: 0 };
-      traitTotals[row.trait].sum += row.score;
-      traitTotals[row.trait].count++;
-      if (raterId && row.rater === raterId) myRatingMap[row.trait] = row.score;
+    if (!row?.resumeData || !row.resumeFileName || !row.resumeMimeType) {
+      return null;
     }
 
-    const traits = PERSONALITY_TRAITS.map(t => ({
-      key: t.key, label: t.label, emoji: t.emoji,
-      avgScore: traitTotals[t.key] ? traitTotals[t.key].sum / traitTotals[t.key].count : 0,
-    }));
-
-    const ratedTraits = traits.filter(t => t.avgScore > 0);
-    const totalScore = ratedTraits.length > 0
-      ? Math.round((ratedTraits.reduce((s, t) => s + t.avgScore, 0) / ratedTraits.length) / 5 * 100)
-      : 0;
+    let improvements: string[] = [];
+    try {
+      const parsed = JSON.parse(row.resumeImprovements || "[]");
+      improvements = Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : [];
+    } catch {
+      improvements = [];
+    }
 
     return {
-      traits,
-      totalScore,
-      raterCount: raterSet.size,
-      myRating: Object.keys(myRatingMap).length > 0 ? myRatingMap : null,
+      fileName: row.resumeFileName,
+      mimeType: row.resumeMimeType,
+      data: row.resumeData,
+      score: row.resumeScore,
+      improvements,
+      updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
     };
   }
 
-  async getPersonalityLeaderboard(limit = 20, traitFilter?: string): Promise<PersonalityEntry[]> {
-    const validTrait = traitFilter && PERSONALITY_TRAITS.some(t => t.key === traitFilter) ? traitFilter : undefined;
+  async toggleUpvote(voterId: number, studentId: number): Promise<{ upvoted: boolean; upvoteCount: number }> {
+    const [existing] = await db.select().from(upvotes).where(and(eq(upvotes.voterId, voterId), eq(upvotes.studentId, studentId)));
 
-    const baseQuery = db.select({
-      rateeId: personalityRatings.rateeId,
-      trait: personalityRatings.trait,
-      avgScore: sql<number>`AVG(${personalityRatings.score})`,
-      raterCount: sql<number>`COUNT(DISTINCT ${personalityRatings.raterId})`,
-    }).from(personalityRatings);
-
-    const rows = validTrait
-      ? await baseQuery.where(eq(personalityRatings.trait, validTrait)).groupBy(personalityRatings.rateeId, personalityRatings.trait)
-      : await baseQuery.groupBy(personalityRatings.rateeId, personalityRatings.trait);
-
-    const byStudent: Record<number, { traits: Record<string, number>; raterCount: number }> = {};
-    for (const row of rows) {
-      if (!byStudent[row.rateeId]) byStudent[row.rateeId] = { traits: {}, raterCount: Number(row.raterCount) };
-      byStudent[row.rateeId].traits[row.trait] = Number(row.avgScore);
-      byStudent[row.rateeId].raterCount = Math.max(byStudent[row.rateeId].raterCount, Number(row.raterCount));
+    if (existing) {
+      await db.delete(upvotes).where(eq(upvotes.id, existing.id));
+      await db.update(students)
+        .set({ upvoteCount: sql`GREATEST(${students.upvoteCount} - 1, 0)` })
+        .where(eq(students.id, studentId));
+    } else {
+      await db.insert(upvotes).values({ voterId, studentId }).onConflictDoNothing();
+      await db.update(students)
+        .set({ upvoteCount: sql`${students.upvoteCount} + 1` })
+        .where(eq(students.id, studentId));
     }
 
-    const studentIds = Object.keys(byStudent).map(Number);
-    if (studentIds.length === 0) return [];
+    const [student] = await db.select({ upvoteCount: students.upvoteCount }).from(students).where(eq(students.id, studentId));
+    return { upvoted: !existing, upvoteCount: student?.upvoteCount ?? 0 };
+  }
 
-    const studentRows = await db.select({
-      id: students.id, name: students.name, email: students.email, rollNumber: students.rollNumber,
-      pictureUrl: students.pictureUrl, searchCount: students.searchCount, feedbackCount: students.feedbackCount,
-      profileStrength: students.profileStrength, phone: students.phone,
-      userId: users.id,
-    }).from(students).leftJoin(users, eq(users.studentId, students.id)).where(inArray(students.id, studentIds));
+  async getUpvoteStatus(voterId: number, studentId: number): Promise<{ upvoted: boolean; upvoteCount: number }> {
+    const [existing, student] = await Promise.all([
+      db.select({ id: upvotes.id }).from(upvotes).where(and(eq(upvotes.voterId, voterId), eq(upvotes.studentId, studentId))).limit(1),
+      db.select({ upvoteCount: students.upvoteCount }).from(students).where(eq(students.id, studentId)).limit(1),
+    ]);
 
-    const traitMeta = Object.fromEntries(PERSONALITY_TRAITS.map(t => [t.key, t]));
-
-    const entries: PersonalityEntry[] = studentRows.map(s => {
-      const data = byStudent[s.id];
-      let dominantTrait: PersonalityEntry["dominantTrait"] = null;
-      let traitScore = 0;
-
-      if (validTrait) {
-        const score = data.traits[validTrait] ?? 0;
-        const meta = traitMeta[validTrait];
-        dominantTrait = meta ? { key: meta.key, label: meta.label, emoji: meta.emoji, score: Number(score.toFixed(1)) } : null;
-        traitScore = Number(score.toFixed(1));
-      } else {
-        let bestKey = "";
-        let bestScore = 0;
-        for (const [k, v] of Object.entries(data.traits)) {
-          if (v > bestScore) { bestScore = v; bestKey = k; }
-        }
-        if (bestKey && traitMeta[bestKey]) {
-          const meta = traitMeta[bestKey];
-          dominantTrait = { key: meta.key, label: meta.label, emoji: meta.emoji, score: Number(bestScore.toFixed(1)) };
-          traitScore = Number(bestScore.toFixed(1));
-        }
-      }
-
-      return {
-        id: s.id, name: s.name, email: s.email, rollNumber: s.rollNumber,
-        pictureUrl: s.pictureUrl, searchCount: s.searchCount, feedbackCount: s.feedbackCount,
-        profileStrength: s.profileStrength,
-        raterCount: data.raterCount, verified: s.userId != null, dominantTrait, traitScore,
-      };
-    }).sort((a, b) => b.traitScore - a.traitScore).slice(0, limit);
-
-    return entries;
+    return {
+      upvoted: !!existing[0],
+      upvoteCount: student[0]?.upvoteCount ?? 0,
+    };
   }
 
   async getPriorReactionContext(studentId: number): Promise<string> {

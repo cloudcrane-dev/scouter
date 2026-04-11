@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { sendInsightNotification, sendPersonalityRatingNotification, getDayKey } from "./email";
+import { sendInsightNotification } from "./email";
 import { sendRankEmails } from "./rankEmails";
 import { buildAIContextBlock } from "@shared/iitj";
 import OpenAI from "openai";
@@ -9,6 +9,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import { PDFParse } from "pdf-parse";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -332,11 +333,7 @@ For faculty/staff: focus on research visibility, citation metrics, collaboration
 If peer feedback exists, weave the most relevant insight naturally into Strengths or Improvement Areas — don't create a separate section for it.
 
 ## Social Perception
-If personality trait ratings or profile view data is provided, add this section. Cover:
-- How peers perceive this student based on trait ratings (mention specific traits and scores). If trait scores are high (4+), highlight them as social strengths. If low, note them diplomatically.
-- What the profile view count says about their visibility/popularity on campus.
-- If no trait ratings exist yet, mention that peers haven't rated them yet and encourage building connections.
-Keep this section 2–4 bullet points. Be insightful, not just a data dump — interpret what the numbers mean socially.
+If profile view data is provided, add this section with 2-4 bullet points about what the view count says about visibility/popularity on campus and how they can improve discoverability.
 
 End with one line:
 **Verdict:** <one honest, direct sentence summarising where they stand and the single most important thing to do next>
@@ -396,6 +393,78 @@ ${webContext || "No web results found — student has minimal or no public web p
   const text = raw.replace(/\[RATINGS\][\s\S]*?\[\/RATINGS\]/g, "").trim() || "Unable to generate analysis.";
 
   return { text, ratingsJson };
+}
+
+async function extractResumeText(mimeType: string, bytes: Buffer): Promise<string> {
+  if (mimeType === "application/pdf") {
+    const parser = new PDFParse({ data: bytes });
+    try {
+      const parsed = await parser.getText();
+      return (parsed.text || "").trim();
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  if (mimeType === "text/plain") {
+    return bytes.toString("utf-8").trim();
+  }
+
+  throw new Error("Unsupported resume format. Please upload PDF or TXT.");
+}
+
+async function rateResumeContent(text: string): Promise<{ score: number; improvements: string[] }> {
+  const trimmed = text.replace(/\s+/g, " ").trim().slice(0, 14000);
+  if (!trimmed || trimmed.length < 120) {
+    return {
+      score: 20,
+      improvements: [
+        "Add more detail to your resume content before uploading.",
+        "Include education, technical skills, and at least 2 concrete projects.",
+        "Use measurable impact (numbers, outcomes) in each experience bullet.",
+      ],
+    };
+  }
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-5.2",
+    messages: [
+      {
+        role: "system",
+        content: "You are an expert resume reviewer for college students. Return strict JSON only with keys score (integer 1-100) and improvements (array of 4-7 short strings). Improvements must be actionable and specific.",
+      },
+      {
+        role: "user",
+        content: `Review this resume and score it for internship readiness:\n\n${trimmed}`,
+      },
+    ],
+    response_format: { type: "json_object" },
+    max_completion_tokens: 500,
+  });
+
+  const raw = response.choices[0]?.message?.content || "{}";
+  let score = 50;
+  let improvements: string[] = [
+    "Add measurable outcomes to your project and internship bullets.",
+    "Make your skills section focused and grouped by proficiency.",
+    "Improve structure and readability with concise bullet points.",
+    "Tailor resume highlights to the role you are applying for.",
+  ];
+
+  try {
+    const parsed = JSON.parse(raw) as { score?: number; improvements?: unknown[] };
+    if (typeof parsed.score === "number") {
+      score = Math.max(1, Math.min(100, Math.round(parsed.score)));
+    }
+    if (Array.isArray(parsed.improvements)) {
+      const cleaned = parsed.improvements.filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean);
+      if (cleaned.length > 0) improvements = cleaned.slice(0, 7);
+    }
+  } catch {
+    // Keep safe defaults if parsing fails.
+  }
+
+  return { score, improvements };
 }
 
 async function moderateContent(text: string): Promise<{ allowed: boolean; reason: string }> {
@@ -633,7 +702,7 @@ export async function registerRoutes(
 
   app.get("/api/students/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const student = await storage.getStudent(id);
       if (!student) return res.status(404).json({ error: "Student not found" });
@@ -654,7 +723,7 @@ export async function registerRoutes(
 
   app.post("/api/students/:id/view", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const student = await storage.getStudent(id);
       if (!student) return res.status(404).json({ error: "Student not found" });
@@ -672,7 +741,7 @@ export async function registerRoutes(
 
   app.post("/api/students/:id/analyze", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
 
       const ip = getClientIP(req);
@@ -713,10 +782,9 @@ export async function registerRoutes(
 
       const socialLinksData = await storage.getSocialLinks(id);
 
-      const [webContext, socialLinksContent, personalityData] = await Promise.all([
+      const [webContext, socialLinksContent] = await Promise.all([
         gatherWebContext(student.name, student.email, student.rollNumber),
         gatherSocialLinksContent(socialLinksData),
-        storage.getPersonalityData(id),
       ]);
 
       if (socialLinksContent) {
@@ -731,13 +799,7 @@ export async function registerRoutes(
 
       const priorReactionContext = await storage.getPriorReactionContext(id);
 
-      let socialPerceptionContext = "";
-      const ratedTraits = personalityData.traits.filter(t => t.avgScore > 0);
-      if (ratedTraits.length > 0) {
-        socialPerceptionContext += `Personality trait ratings (scored 1-5 by peers, ${personalityData.raterCount} rater${personalityData.raterCount !== 1 ? "s" : ""}):\n`;
-        socialPerceptionContext += ratedTraits.map(t => `- ${t.label} (${t.emoji}): ${t.avgScore.toFixed(1)}/5`).join("\n");
-      }
-      socialPerceptionContext += `\nProfile views: ${student.searchCount} (number of times people have looked up this student on SkillSniffer)`;
+      const socialPerceptionContext = `Profile views: ${student.searchCount} (number of times people have looked up this student on SkillSniffer)`;
 
       const { text: analysis, ratingsJson } = await generateAIAnalysis(
         { name: student.name, email: student.email, rollNumber: student.rollNumber },
@@ -790,7 +852,7 @@ export async function registerRoutes(
 
   app.get("/api/students/:id/reaction-summary", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const summary = await storage.getReactionSummary(id);
       res.json(summary);
@@ -802,7 +864,7 @@ export async function registerRoutes(
 
   app.get("/api/students/:id/feedback", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const feedbackList = await storage.getFeedback(id);
       res.json(feedbackList);
@@ -814,7 +876,7 @@ export async function registerRoutes(
 
   app.post("/api/students/:id/feedback", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const student = await storage.getStudent(id);
       if (!student) return res.status(404).json({ error: "Student not found" });
@@ -856,7 +918,7 @@ export async function registerRoutes(
 
   app.get("/api/students/:id/social-links", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const links = await storage.getSocialLinks(id);
       res.json(links);
@@ -942,11 +1004,6 @@ export async function registerRoutes(
     try {
       const rawSort = req.query.sort as string;
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-      if (rawSort === "personality") {
-        const trait = req.query.trait as string | undefined;
-        const leaderboard = await storage.getPersonalityLeaderboard(limit, trait);
-        return res.json(leaderboard);
-      }
       const sortBy = rawSort === "feedback" ? "feedback" : rawSort === "strength" ? "strength" : "searches";
       const leaderboard = await storage.getLeaderboardWithVerified(sortBy, limit);
       res.json(leaderboard);
@@ -956,45 +1013,116 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/students/:id/personality", async (req, res) => {
+  app.put("/api/students/:id/resume", isAuthenticated, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
       const user = req.user as any;
-      const raterId = user?.id ?? undefined;
-      const data = await storage.getPersonalityData(id, raterId);
-      res.json(data);
+      if (user.studentId !== id) {
+        return res.status(403).json({ error: "You can only upload your own resume." });
+      }
+
+      const { fileName, mimeType, dataBase64 } = req.body as { fileName?: string; mimeType?: string; dataBase64?: string };
+      if (!fileName || !mimeType || !dataBase64) {
+        return res.status(400).json({ error: "fileName, mimeType and dataBase64 are required." });
+      }
+
+      if (!["application/pdf", "text/plain"].includes(mimeType)) {
+        return res.status(400).json({ error: "Only PDF and TXT resumes are supported." });
+      }
+
+      const bytes = Buffer.from(dataBase64, "base64");
+      if (bytes.length > 3 * 1024 * 1024) {
+        return res.status(400).json({ error: "Resume file exceeds 3MB." });
+      }
+
+      const extractedText = await extractResumeText(mimeType, bytes);
+      const review = await rateResumeContent(extractedText);
+      await storage.saveStudentResume(id, {
+        fileName: fileName.slice(0, 200),
+        mimeType,
+        data: dataBase64,
+        score: review.score,
+        improvements: review.improvements,
+      });
+
+      res.json({ success: true, score: review.score, improvements: review.improvements });
     } catch (error) {
-      console.error("Personality data error:", error);
-      res.status(500).json({ error: "Failed to get personality data" });
+      console.error("Resume upload error:", error);
+      const message = error instanceof Error ? error.message : "Failed to upload resume";
+      res.status(500).json({ error: message });
     }
   });
 
-  app.post("/api/students/:id/personality-rate", isAuthenticated, async (req, res) => {
+  app.get("/api/students/:id/resume/meta", isAuthenticated, async (req, res) => {
     try {
-      const rateeId = parseInt(req.params.id);
-      if (isNaN(rateeId)) return res.status(400).json({ error: "Invalid student ID" });
-      const user = req.user as any;
-      if (user.studentId === rateeId) return res.status(403).json({ error: "You cannot rate yourself." });
-      const { ratings } = req.body;
-      if (!Array.isArray(ratings) || ratings.length === 0) return res.status(400).json({ error: "ratings array required" });
-      await storage.submitPersonalityRatings(user.id, rateeId, ratings);
-      const updated = await storage.getPersonalityData(rateeId, user.id);
-      res.json({ success: true, ...updated });
-
-      const student = await storage.getStudent(rateeId);
-      if (student?.email?.endsWith("@iitj.ac.in")) {
-        const dayKey = getDayKey();
-        const alreadySent = await storage.hasEmailBeenSent(rateeId, "personality_rating", dayKey);
-        if (!alreadySent) {
-          sendPersonalityRatingNotification({ toEmail: student.email, studentName: student.name, studentId: student.id })
-            .then(() => storage.recordEmailSent(rateeId, "personality_rating", dayKey))
-            .catch(e => console.error("Rating notification email failed:", e));
-        }
-      }
+      const id = parseInt(String(req.params.id));
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const resume = await storage.getStudentResume(id);
+      if (!resume) return res.json({ exists: false });
+      res.json({
+        exists: true,
+        fileName: resume.fileName,
+        mimeType: resume.mimeType,
+        score: resume.score,
+        improvements: resume.improvements,
+      });
     } catch (error) {
-      console.error("Personality rate error:", error);
-      res.status(500).json({ error: "Failed to submit rating" });
+      console.error("Resume meta error:", error);
+      res.status(500).json({ error: "Failed to get resume details" });
+    }
+  });
+
+  app.get("/api/students/:id/resume/download", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(String(req.params.id));
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const resume = await storage.getStudentResume(id);
+      if (!resume) return res.status(404).json({ error: "Resume not found" });
+
+      const fileBuffer = Buffer.from(resume.data, "base64");
+      const isDownload = req.query.download === "true";
+      const disposition = isDownload ? "attachment" : "inline";
+      const safeName = (resume.fileName || "resume.pdf").replace(/[^a-zA-Z0-9_.-]/g, "_");
+
+      res.setHeader("Content-Type", resume.mimeType);
+      res.setHeader("Content-Length", String(fileBuffer.length));
+      res.setHeader("Content-Disposition", `${disposition}; filename="${safeName}"`);
+      res.send(fileBuffer);
+    } catch (error) {
+      console.error("Resume download error:", error);
+      res.status(500).json({ error: "Failed to download resume" });
+    }
+  });
+
+  app.get("/api/students/:id/upvote-status", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(String(req.params.id));
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const user = req.user as any;
+      const status = await storage.getUpvoteStatus(user.id, id);
+      res.json(status);
+    } catch (error) {
+      console.error("Upvote status error:", error);
+      res.status(500).json({ error: "Failed to get upvote status" });
+    }
+  });
+
+  app.post("/api/students/:id/upvote", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(String(req.params.id));
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+      const user = req.user as any;
+      if (user.studentId === id) return res.status(403).json({ error: "You cannot upvote your own profile." });
+
+      const student = await storage.getStudent(id);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const result = await storage.toggleUpvote(user.id, id);
+      res.json(result);
+    } catch (error) {
+      console.error("Upvote error:", error);
+      res.status(500).json({ error: "Failed to update upvote" });
     }
   });
 
