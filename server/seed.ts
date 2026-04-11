@@ -4,6 +4,41 @@ import { sql } from "drizzle-orm";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
+async function runMigrations() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS upvote_count integer NOT NULL DEFAULT 0
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS resumes (
+        id serial PRIMARY KEY,
+        student_id integer NOT NULL REFERENCES students(id) ON DELETE CASCADE UNIQUE,
+        file_name text NOT NULL,
+        mime_type text NOT NULL,
+        data text NOT NULL,
+        score integer,
+        improvements text,
+        updated_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS upvotes (
+        id serial PRIMARY KEY,
+        voter_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        student_id integer NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        UNIQUE(voter_id, student_id)
+      )
+    `);
+
+    console.log("Schema migrations applied successfully.");
+  } catch (err) {
+    console.error("Migration error (non-fatal):", err);
+  }
+}
+
 function parseCSVLine(line: string): string[] {
   const fields: string[] = [];
   let current = "";
@@ -50,6 +85,7 @@ function isLikelyStudent(name: string, email: string, rollNumber: string | null)
 }
 
 export async function seedDatabase() {
+  await runMigrations();
   try {
     const csvPath = resolve(process.cwd(), "contacts-1.csv");
     let csvData: string;
