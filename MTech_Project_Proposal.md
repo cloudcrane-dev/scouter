@@ -37,3 +37,27 @@ The project should be presented as a public-profile and self-improvement tool, n
 ## Future Scope
 Future enhancements may include more robust source connectors, richer document parsing, better ranking explanations, trend tracking over time, opt-out controls, and department-level analytics dashboards.
 
+## Presentation Slide Outline
+1. Background of the problem: Student profile data is scattered across directory sources, resumes, and public online profiles, making it hard to search, compare, and improve in one place.
+2. Problem definition: Build a system that extracts, stores, enriches, and analyzes IITJ student profile data while enabling resume review and profile intelligence.
+3. Importance of the problem: Students need a practical way to understand their online presence, improve resumes, and manage verified profile information.
+4. Existing work in this direction: Existing directory search tools, resume scorers, and profile platforms usually solve only one part of the workflow and do not integrate ingestion, analysis, and ranking end to end.
+5. Your objectives: Extract data, normalize it, enable search, analyze resumes, rank profiles, support profile claiming, and cache repeated analysis.
+6. Possible methods/tools to be used: Python for data extraction, PostgreSQL and Drizzle for storage, Express and React for the web app, and AI-assisted analysis for resume and profile enrichment.
+7. Expected outcomes: A searchable student intelligence platform, resume scoring with suggestions, leaderboard-style ranking, and a reusable data engineering pipeline.
+
+## Submission Optimizations
+1. Keep the title academic and neutral; use "IITJ Student Profile Intelligence System" in the report, while treating "Scouter" as the product name if needed.
+2. Add one architecture diagram and one data-flow diagram to make the pipeline easy to explain in viva.
+3. Include a short comparison table showing how your project combines directory ingestion, resume analysis, ranking, and profile claiming in one system.
+4. Add a metrics table with extraction accuracy, deduplication ratio, search latency, resume parsing success rate, and cache hit rate.
+5. Add a privacy note stating that only public or user-authorized data is used, and that ranking is heuristic rather than absolute.
+6. Show one end-to-end demo path: search a profile, open details, upload a resume, view the score, and claim the profile.
+
+## Report Suggestions
+1. Emphasize the data engineering pipeline more than the UI.
+2. Describe ranking as a derived analytics layer, not as a judgment of student worth.
+3. Mention caching and indexing as the main performance optimizations.
+4. Mention deduplication, schema normalization, and controlled profile claiming as the main quality safeguards.
+5. Put future work at the end: better connectors, richer document parsing, explainable ranking, and opt-out controls.
+
