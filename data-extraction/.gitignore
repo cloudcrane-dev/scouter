@@ -1,0 +1,12 @@
+credentials.json
+token.json
+token_api.json
+contact_photos/
+contacts.csv
+contacts-1.csv
+progress.jsonl
+user_data/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
