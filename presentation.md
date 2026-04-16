@@ -11,6 +11,9 @@ footer: "Machine Learning with Big Data | Chirag Phor (M25DE1021)"
 **Course:** Machine Learning with Big Data  
 **Team Member:** Chirag Phor (Roll Number: M25DE1021)
 
+**Live Demo:** [https://skillsniffer.in](https://skillsniffer.in)  
+**GitHub Repository:** [https://github.com/cloudcrane-dev/scouter](https://github.com/cloudcrane-dev/scouter)
+
 ---
 
 ## 1. Background of the Problem

@@ -10,6 +10,10 @@ date: "April 2026"
 **Course:** Machine Learning with Big Data
 **Project Title:** IITJ Student Profile Intelligence System (Scouter)
 
+### Important Links
+* **Live Demo:** [https://skillsniffer.in](https://skillsniffer.in)
+* **GitHub Repository:** [https://github.com/cloudcrane-dev/scouter](https://github.com/cloudcrane-dev/scouter)
+
 ### Team Members and Contributions
 * **Chirag Phor (Roll Number: M25DE1021)**
   * **Individual Contributions:** 
