@@ -4,3 +4,18 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Local data extraction artifacts
+data-extraction/credentials.json
+data-extraction/token.json
+data-extraction/token_api.json
+data-extraction/contacts.csv
+data-extraction/contacts-1.csv
+data-extraction/progress.jsonl
+data-extraction/user_data/
+data-extraction/venv/
